@@ -14,19 +14,19 @@
         </header>
 
         <main>
-            <section class="card">
+            <section>
                 <header>
                     <h3>Checkers</h3>
                 </header>
                 {% if checkers %}
-                <table>
+                <table class="striped">
                     <thead>
                         <tr>
                             <th>Name</th>
                             <th>Version</th>
-                            <th title="Correctly accepted valid proofs">✅</th>
-                            <th title="Correctly rejected invalid proofs">❌</th>
-                            <th title="Time to process mathlib test">⏱️</th>
+                            <th class="text-center" title="Correctly accepted valid proofs">✅</th>
+                            <th class="text-center" title="Correctly rejected invalid proofs">❌</th>
+                            <th class="text-right" title="Time to process mathlib test">⏱️</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -34,13 +34,13 @@
                         <tr>
                             <td>{{ checker.name }}</td>
                             <td>{{ checker.version }}</td>
-                            <td class="{% if checker.stats.accept_correct == checker.stats.accept_total and checker.stats.accept_total > 0 %}text-success{% elif checker.stats.accept_correct < checker.stats.accept_total %}text-error{% endif %}">
+                            <td class="text-center {% if checker.stats.accept_correct == checker.stats.accept_total and checker.stats.accept_total > 0 %}bg-success{% elif checker.stats.accept_correct < checker.stats.accept_total %}bg-error{% endif %}">
                                 {{ checker.stats.accept_correct }}/{{ checker.stats.accept_total }}
                             </td>
-                            <td class="{% if checker.stats.reject_correct == checker.stats.reject_total and checker.stats.reject_total > 0 %}text-success{% elif checker.stats.reject_correct < checker.stats.reject_total %}text-error{% endif %}">
+                            <td class="text-center {% if checker.stats.reject_correct == checker.stats.reject_total and checker.stats.reject_total > 0 %}bg-success{% elif checker.stats.reject_correct < checker.stats.reject_total %}bg-error{% endif %}">
                                 {{ checker.stats.reject_correct }}/{{ checker.stats.reject_total }}
                             </td>
-                            <td>
+                            <td class="text-right">
                                 {% if checker.stats.mathlib_time is not none %}
                                     {{ format_duration(checker.stats.mathlib_time) }}
                                 {% else %}
@@ -56,7 +56,7 @@
                 {% endif %}
             </section>
 
-            <section class="card">
+            <section>
                 <header>
                     <h3>Tests</h3>
                 </header>
