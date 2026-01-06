@@ -1,5 +1,5 @@
 {
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   outputs = { self, nixpkgs }:
     let
       system = "x86_64-linux";
@@ -12,6 +12,7 @@
           python3
           python3Packages.jinja2
           python3Packages.pyyaml
+          elan
         ];
       };
     };

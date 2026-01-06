@@ -20,9 +20,13 @@ jobs:
         uses: cachix/install-nix-action@v26
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
+
+      - name: Setup nix shell
+        run: |
+          nix develop -c true
       
       - name: Generate tests
         run: |
