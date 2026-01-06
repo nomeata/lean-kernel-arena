@@ -6,15 +6,82 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import yaml
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+# Global verbose flag
+VERBOSE = False
+
 
 def get_project_root() -> Path:
     """Get the project root directory."""
     return Path(__file__).parent.resolve()
+
+
+def format_duration(seconds: float) -> str:
+    """Format a duration in seconds to a human-readable string."""
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f}h"
+    elif seconds >= 60:
+        return f"{seconds / 60:.1f}m"
+    elif seconds >= 1:
+        return f"{seconds:.1f}s"
+    else:
+        return f"{seconds * 1000:.0f}ms"
+
+
+def run_cmd(
+    cmd: str | list[str],
+    cwd: Path | None = None,
+    env: dict | None = None,
+    shell: bool = False,
+    capture_output: bool = True,
+) -> subprocess.CompletedProcess:
+    """Run a command with optional verbose output.
+    
+    Args:
+        cmd: Command to run (string for shell=True, list for shell=False)
+        cwd: Working directory
+        env: Environment variables
+        shell: Whether to run as shell command
+        capture_output: Whether to capture stdout/stderr
+    
+    Returns:
+        CompletedProcess instance
+    """
+    global VERBOSE
+    
+    # Format command for display
+    if isinstance(cmd, list):
+        cmd_str = " ".join(cmd)
+    else:
+        cmd_str = cmd
+    
+    if VERBOSE:
+        cwd_str = f" (in {cwd})" if cwd else ""
+        print(f"    $ {cmd_str}{cwd_str}")
+    
+    start_time = time.time()
+    
+    result = subprocess.run(
+        cmd,
+        cwd=cwd,
+        env=env,
+        shell=shell,
+        capture_output=capture_output,
+        text=True,
+    )
+    
+    elapsed = time.time() - start_time
+    
+    if VERBOSE:
+        status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
+        print(f"      -> {status} in {format_duration(elapsed)}")
+    
+    return result
 
 
 def load_yaml_files(directory: Path) -> list[dict]:
@@ -94,7 +161,7 @@ def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
             clone_cmd.extend(["--branch", ref])
         clone_cmd.extend([url, str(work_dir / "repo")])
 
-        result = subprocess.run(clone_cmd, capture_output=True, text=True)
+        result = run_cmd(clone_cmd)
         if result.returncode != 0:
             print(f"  Error cloning: {result.stderr}")
             return None
@@ -103,12 +170,7 @@ def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
 
         # Checkout specific revision if specified
         if rev:
-            result = subprocess.run(
-                ["git", "checkout", rev],
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-            )
+            result = run_cmd(["git", "checkout", rev], cwd=repo_dir)
             if result.returncode != 0:
                 print(f"  Error checking out {rev}: {result.stderr}")
                 return None
@@ -138,14 +200,14 @@ def create_test(test: dict, output_dir: Path) -> bool:
     """Create a single test."""
     name = test["name"]
     module = test.get("module")
-    run_cmd = test.get("run")
+    run_cmd_str = test.get("run")
     file_path = test.get("file")
     pre_build = test.get("pre-build")
 
     # Determine test type based on fields present
     if module:
         test_type = "module"
-    elif run_cmd:
+    elif run_cmd_str:
         test_type = "run"
     elif file_path:
         test_type = "file"
@@ -177,13 +239,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
     # Run pre-build command if specified
     if pre_build:
         print(f"  Running pre-build: {pre_build}")
-        result = subprocess.run(
-            pre_build,
-            shell=True,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-        )
+        result = run_cmd(pre_build, cwd=work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Pre-build failed: {result.stderr}")
             return False
@@ -198,32 +254,20 @@ def create_test(test: dict, output_dir: Path) -> bool:
             clone_cmd = ["git", "clone", "--branch", "json_output",
                         "https://github.com/ammkrn/lean4export",
                         str(lean4export_dir)]
-            result = subprocess.run(clone_cmd, capture_output=True, text=True)
+            result = run_cmd(clone_cmd)
             if result.returncode != 0:
                 print(f"  Error cloning lean4export: {result.stderr}")
                 return False
 
             print(f"  Building lean4export...")
-            result = subprocess.run(
-                "lake build",
-                shell=True,
-                cwd=lean4export_dir,
-                capture_output=True,
-                text=True,
-            )
+            result = run_cmd("lake build", cwd=lean4export_dir, shell=True)
             if result.returncode != 0:
                 print(f"  Error building lean4export: {result.stderr}")
                 return False
 
         # Build the module in the repo
         print(f"  Building module {module}...")
-        result = subprocess.run(
-            f"lake build {module}",
-            shell=True,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-        )
+        result = run_cmd(f"lake build {module}", cwd=work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Build failed: {result.stderr}")
             return False
@@ -233,31 +277,18 @@ def create_test(test: dict, output_dir: Path) -> bool:
         lean4export_bin = lean4export_dir / ".lake" / "build" / "bin" / "lean4export"
         export_cmd = f"lake env {lean4export_bin} {module} > {tmp_file}"
 
-        result = subprocess.run(
-            export_cmd,
-            shell=True,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-        )
+        result = run_cmd(export_cmd, cwd=work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Export failed: {result.stderr}")
             return False
 
-    elif run_cmd:
+    elif run_cmd_str:
         # Run the script with $OUT environment variable
-        print(f"  Running: {run_cmd}")
+        print(f"  Running: {run_cmd_str}")
         env = os.environ.copy()
         env["OUT"] = str(tmp_file)
 
-        result = subprocess.run(
-            run_cmd,
-            shell=True,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
+        result = run_cmd(run_cmd_str, cwd=work_dir, shell=True, env=env)
         if result.returncode != 0:
             print(f"  Script failed: {result.stderr}")
             return False
@@ -354,19 +385,14 @@ def build_checker(checker: dict, build_dir: Path) -> bool:
             clone_cmd.extend(["--branch", ref])
         clone_cmd.extend([url, str(repo_dir)])
 
-        result = subprocess.run(clone_cmd, capture_output=True, text=True)
+        result = run_cmd(clone_cmd)
         if result.returncode != 0:
             print(f"  Error cloning: {result.stderr}")
             return False
 
         # Checkout specific revision if specified
         if rev:
-            result = subprocess.run(
-                ["git", "checkout", rev],
-                cwd=repo_dir,
-                capture_output=True,
-                text=True,
-            )
+            result = run_cmd(["git", "checkout", rev], cwd=repo_dir)
             if result.returncode != 0:
                 print(f"  Error checking out {rev}: {result.stderr}")
                 return False
@@ -378,13 +404,7 @@ def build_checker(checker: dict, build_dir: Path) -> bool:
     # Run build command if specified
     if build_cmd:
         print(f"  Building: {build_cmd}")
-        result = subprocess.run(
-            build_cmd,
-            shell=True,
-            cwd=work_dir,
-            capture_output=True,
-            text=True,
-        )
+        result = run_cmd(build_cmd, cwd=work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Build failed: {result.stderr}")
             return False
@@ -431,7 +451,7 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
     """Run a checker on a test and return the result."""
     checker_name = checker["name"]
     test_name = test["name"]
-    run_cmd = checker["run"]
+    checker_run_cmd = checker["run"]
 
     test_file = tests_dir / f"{test_name}.ndjson"
     if not test_file.exists():
@@ -453,14 +473,8 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
     work_dir.mkdir(parents=True, exist_ok=True)
 
     # Run the checker
-    full_cmd = f"{run_cmd} {test_file}"
-    result = subprocess.run(
-        full_cmd,
-        shell=True,
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-    )
+    full_cmd = f"{checker_run_cmd} {test_file}"
+    result = run_cmd(full_cmd, cwd=work_dir, shell=True)
 
     exit_code = result.returncode
     if exit_code == 0:
@@ -518,7 +532,7 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
     results = []
     for checker in checkers:
         for test in tests:
-            print(f"Running {checker['name']} on {test['name']}...", end=" ")
+            print(f"Running {checker['name']} on {test['name']}...", end="\n" if VERBOSE else " ")
             result = run_checker_on_test(checker, test, build_dir, tests_dir)
             results.append(result)
             print(f"[{result['status']}]")
@@ -595,9 +609,16 @@ def cmd_build_site(args: argparse.Namespace) -> int:
 
 def main() -> int:
     """Main entry point."""
+    global VERBOSE
+    
     parser = argparse.ArgumentParser(
         prog="lka",
         description="Lean Kernel Arena - Tool for managing Lean kernel tests and checkers",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print commands being executed and their stats",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -649,6 +670,9 @@ def main() -> int:
     )
 
     args = parser.parse_args()
+    
+    # Set global verbose flag
+    VERBOSE = args.verbose
 
     if args.command is None:
         parser.print_help()
