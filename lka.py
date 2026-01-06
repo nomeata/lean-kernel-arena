@@ -156,6 +156,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
     print(f"Creating test: {name} (type: {test_type})")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f"{name}.ndjson"
+    tmp_file = output_dir / f"{name}.ndjson.tmp"
 
     # Handle static file case (no work directory needed)
     if file_path:
@@ -163,7 +164,8 @@ def create_test(test: dict, output_dir: Path) -> bool:
         if not source_file.exists():
             print(f"  Source file not found: {source_file}")
             return False
-        shutil.copy(source_file, output_file)
+        shutil.copy(source_file, tmp_file)
+        tmp_file.rename(output_file)
         print(f"  Copied {source_file} to {output_file}")
         return True
 
@@ -229,7 +231,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
         # Export using lean4export
         print(f"  Exporting module {module}...")
         lean4export_bin = lean4export_dir / ".lake" / "build" / "bin" / "lean4export"
-        export_cmd = f"lake env {lean4export_bin} {module} > {output_file}"
+        export_cmd = f"lake env {lean4export_bin} {module} > {tmp_file}"
 
         result = subprocess.run(
             export_cmd,
@@ -246,7 +248,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
         # Run the script with $OUT environment variable
         print(f"  Running: {run_cmd}")
         env = os.environ.copy()
-        env["OUT"] = str(output_file)
+        env["OUT"] = str(tmp_file)
 
         result = subprocess.run(
             run_cmd,
@@ -260,7 +262,35 @@ def create_test(test: dict, output_dir: Path) -> bool:
             print(f"  Script failed: {result.stderr}")
             return False
 
-    print(f"  Created {output_file}")
+    # Move tmp file to final location upon success
+    tmp_file.rename(output_file)
+
+    # Show stats about the created file
+    file_size = output_file.stat().st_size
+    with open(output_file, "r") as f:
+        line_count = sum(1 for _ in f)
+    
+    # Format file size in human-readable format
+    if file_size >= 1024 * 1024 * 1024:
+        size_str = f"{file_size / (1024 * 1024 * 1024):.1f} GB"
+    elif file_size >= 1024 * 1024:
+        size_str = f"{file_size / (1024 * 1024):.1f} MB"
+    elif file_size >= 1024:
+        size_str = f"{file_size / 1024:.1f} KB"
+    else:
+        size_str = f"{file_size} B"
+
+    # Format line count with SI prefixes
+    if line_count >= 1_000_000_000:
+        lines_str = f"{line_count / 1_000_000_000:.1f}G"
+    elif line_count >= 1_000_000:
+        lines_str = f"{line_count / 1_000_000:.1f}M"
+    elif line_count >= 1_000:
+        lines_str = f"{line_count / 1_000:.1f}k"
+    else:
+        lines_str = str(line_count)
+
+    print(f"  Created {output_file} ({size_str}, {lines_str} lines)")
     return True
 
 
