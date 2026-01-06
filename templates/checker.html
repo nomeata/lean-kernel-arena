@@ -97,26 +97,16 @@ section pre {
 
     {% for result in results %}
     <h3 id="test-{{ result.test }}">{{ result.test }}</h3>
-    <table>
-        <tr>
-            <th>Expected</th>
-            <td>{{ result.expected or '-' }}</td>
-        </tr>
-        <tr>
-            <th>Result</th>
-            <td class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}">
-                {{ result.status }}
-            </td>
-        </tr>
-        <tr>
-            <th>Duration</th>
-            <td>{{ format_duration(result.duration) }}</td>
-        </tr>
-        <tr>
-            <th>Exit code</th>
-            <td>{{ result.exit_code }}</td>
-        </tr>
-    </table>
+    <p>
+        <span class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.status }}</span>
+        (expected: {{ result.expected or '-' }})
+        · {{ format_duration(result.duration) }}
+        · exit code {{ result.exit_code }}
+        {% if result.test_stats %}
+        · {{ result.test_stats.size_str }}, {{ result.test_stats.lines_str }} lines
+        · <a href="../../{{ result.test_stats.yaml_file }}">{{ result.test_stats.yaml_file }}</a>
+        {% endif %}
+    </p>
     {% if result.stdout %}
     <h5>stdout:</h5>
     <pre>{{ result.stdout }}</pre>

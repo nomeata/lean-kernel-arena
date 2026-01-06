@@ -297,7 +297,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
     # Move tmp file to final location upon success
     tmp_file.rename(output_file)
 
-    # Show stats about the created file
+    # Gather stats about the created file
     file_size = output_file.stat().st_size
     with open(output_file, "r") as f:
         line_count = sum(1 for _ in f)
@@ -323,6 +323,20 @@ def create_test(test: dict, output_dir: Path) -> bool:
         lines_str = str(line_count)
 
     print(f"  Created {output_file} ({size_str}, {lines_str} lines)")
+
+    # Write stats JSON file
+    stats_file = output_dir / f"{name}.stats.json"
+    stats = {
+        "name": name,
+        "size": file_size,
+        "size_str": size_str,
+        "lines": line_count,
+        "lines_str": lines_str,
+        "yaml_file": f"tests/{name}.yaml",
+    }
+    with open(stats_file, "w") as f:
+        json.dump(stats, f, indent=2)
+
     return True
 
 
@@ -599,6 +613,24 @@ def load_results() -> dict:
     return results
 
 
+def load_test_stats() -> dict:
+    """Load all test stats JSON files from _build/tests directory.
+    
+    Returns a dict keyed by test name.
+    """
+    stats = {}
+    stats_dir = get_project_root() / "_build" / "tests"
+    if not stats_dir.exists():
+        return stats
+    
+    for file in stats_dir.glob("*.stats.json"):
+        with open(file, "r") as f:
+            data = json.load(f)
+            stats[data["name"]] = data
+    
+    return stats
+
+
 def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> dict:
     """Compute statistics for a checker across all tests.
     
@@ -673,6 +705,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
     tests = load_tests()
     checkers = load_checkers()
     results = load_results()
+    test_stats = load_test_stats()
     
     # Compute stats for each checker
     for checker in checkers:
@@ -716,6 +749,9 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                 if key in results:
                     result = results[key].copy()
                     result["expected"] = test.get("outcome")
+                    # Add test stats
+                    if test["name"] in test_stats:
+                        result["test_stats"] = test_stats[test["name"]]
                     checker_results.append(result)
             
             checker_data = {
@@ -728,6 +764,9 @@ def cmd_build_site(args: argparse.Namespace) -> int:
             output_file = checker_dir / "index.html"
             checker_template.stream(checker_data).dump(str(output_file))
             print(f"Generated: {output_file}")
+    except Exception as e:
+        print(f"Error rendering checker template: {e}")
+        return 1
     except Exception as e:
         print(f"Error rendering checker template: {e}")
         return 1
