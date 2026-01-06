@@ -1,0 +1,19 @@
+# Nix
+result
+.direnv
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Output directories
+_out/
+_build/
+
+# Editor
+.vscode/
+*.swp
+*.swo
+*~
