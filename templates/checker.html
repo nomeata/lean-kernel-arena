@@ -20,7 +20,12 @@
     margin: 0;
     white-space: pre-wrap;
 }
-section pre {
+details summary {
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 0.5rem;
+}
+section pre, details pre {
     background-color: #f5f5f5;
     padding: 0.5rem;
     border-radius: 4px;
@@ -97,15 +102,26 @@ section pre {
 
     {% for result in results %}
     <h3 id="test-{{ result.test }}">{{ result.test }}</h3>
+    
+    <p><b>Test details:</b>
+        <span class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.expected }}</span>
+        · {% if result.test_stats %}
+          {{ result.test_stats.size_str }}
+        · {{ result.test_stats.lines_str }} lines
+          {% endif %}
+    </p>
+    {% if result.test_yaml %}
+    <details>
+        <summary>Test definition</summary>
+        <pre>{{ result.test_yaml }}</pre>
+    </details>
+    {% endif %}
+    
     <p>
+      <b>Test result:</b>
         <span class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.status }}</span>
-        (expected: {{ result.expected or '-' }})
-        · {{ format_duration(result.duration) }}
         · exit code {{ result.exit_code }}
-        {% if result.test_stats %}
-        · {{ result.test_stats.size_str }}, {{ result.test_stats.lines_str }} lines
-        · <a href="../../{{ result.test_stats.yaml_file }}">{{ result.test_stats.yaml_file }}</a>
-        {% endif %}
+        · {{ format_duration(result.duration) }}
     </p>
     {% if result.stdout %}
     <h5>stdout:</h5>
@@ -116,7 +132,7 @@ section pre {
     <pre>{{ result.stderr }}</pre>
     {% endif %}
     {% if not result.stdout and not result.stderr %}
-    <p class="text-grey">No output</p>
+    <p class="text-grey">No output on stderr or stdout</p>
     {% endif %}
     {% endfor %}
 

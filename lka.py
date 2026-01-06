@@ -752,6 +752,11 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                     # Add test stats
                     if test["name"] in test_stats:
                         result["test_stats"] = test_stats[test["name"]]
+                    # Add test YAML content
+                    test_yaml_path = get_project_root() / "tests" / f"{test['name']}.yaml"
+                    if test_yaml_path.exists():
+                        with open(test_yaml_path, "r") as f:
+                            result["test_yaml"] = f.read()
                     checker_results.append(result)
             
             checker_data = {
