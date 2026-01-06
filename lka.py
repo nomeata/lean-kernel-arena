@@ -2,6 +2,7 @@
 """Lean Kernel Arena - Tool for managing Lean kernel tests and checkers."""
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -447,7 +448,7 @@ def cmd_build_checker(args: argparse.Namespace) -> int:
 # =============================================================================
 
 
-def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: Path) -> dict:
+def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: Path, results_dir: Path) -> dict:
     """Run a checker on a test and return the result."""
     checker_name = checker["name"]
     test_name = test["name"]
@@ -455,13 +456,22 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
 
     test_file = tests_dir / f"{test_name}.ndjson"
     if not test_file.exists():
-        return {
+        result_data = {
             "checker": checker_name,
             "test": test_name,
             "status": "error",
             "message": f"Test file not found: {test_file}",
             "exit_code": -1,
+            "duration": 0,
+            "stdout": "",
+            "stderr": "",
         }
+        # Write result to JSON file
+        results_dir.mkdir(parents=True, exist_ok=True)
+        result_file = results_dir / f"{checker_name}_{test_name}.json"
+        with open(result_file, "w") as f:
+            json.dump(result_data, f, indent=2)
+        return result_data
 
     # Determine working directory
     checker_dir = build_dir / checker_name
@@ -472,9 +482,11 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
 
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Run the checker
+    # Run the checker and track time
     full_cmd = f"{checker_run_cmd} {test_file}"
+    start_time = time.time()
     result = run_cmd(full_cmd, cwd=work_dir, shell=True)
+    duration = time.time() - start_time
 
     exit_code = result.returncode
     if exit_code == 0:
@@ -486,20 +498,30 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
     else:
         status = "error"
 
-    return {
+    result_data = {
         "checker": checker_name,
         "test": test_name,
         "status": status,
         "exit_code": exit_code,
+        "duration": duration,
         "stdout": result.stdout,
         "stderr": result.stderr,
     }
+
+    # Write result to JSON file
+    results_dir.mkdir(parents=True, exist_ok=True)
+    result_file = results_dir / f"{checker_name}_{test_name}.json"
+    with open(result_file, "w") as f:
+        json.dump(result_data, f, indent=2)
+
+    return result_data
 
 
 def cmd_run_checker(args: argparse.Namespace) -> int:
     """Handle the run-checker command."""
     build_dir = get_project_root() / "_build" / "checkers"
     tests_dir = get_project_root() / "_build" / "tests"
+    results_dir = get_project_root() / "_results"
 
     # Determine which checkers to run
     if args.checker:
@@ -533,7 +555,7 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
     for checker in checkers:
         for test in tests:
             print(f"Running {checker['name']} on {test['name']}...", end="\n" if VERBOSE else " ")
-            result = run_checker_on_test(checker, test, build_dir, tests_dir)
+            result = run_checker_on_test(checker, test, build_dir, tests_dir, results_dir)
             results.append(result)
             print(f"[{result['status']}]")
 

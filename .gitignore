@@ -11,6 +11,7 @@ __pycache__/
 # Output directories
 _out/
 _build/
+_results/
 
 # Editor
 .vscode/
