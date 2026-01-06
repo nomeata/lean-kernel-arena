@@ -639,6 +639,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     - accept_total: number of tests with outcome=accept that weren't declined
     - reject_correct: number of tests with outcome=reject that checker rejected
     - reject_total: number of tests with outcome=reject that weren't declined
+    - declined_count: number of tests that checker declined
     - mathlib_time: duration for the mathlib test (or None)
     """
     checker_name = checker["name"]
@@ -647,6 +648,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     accept_total = 0
     reject_correct = 0
     reject_total = 0
+    declined_count = 0
     mathlib_time = None
     
     for test in tests:
@@ -665,8 +667,9 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         if test_name == "mathlib" and result.get("duration") is not None:
             mathlib_time = result["duration"]
         
-        # Skip declined tests
+        # Count declined tests
         if status == "declined":
+            declined_count += 1
             continue
         
         if expected_outcome == "accept":
@@ -683,6 +686,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         "accept_total": accept_total,
         "reject_correct": reject_correct,
         "reject_total": reject_total,
+        "declined_count": declined_count,
         "mathlib_time": mathlib_time,
     }
 

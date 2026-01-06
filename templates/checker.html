@@ -53,19 +53,27 @@ section pre, details pre {
         <h3>Statistics</h3>
     </header>
     <div class="row">
-        <div class="col-6">
+        <div class="col-4">
             <div class="card">
-                <header>Accepted (valid proofs)</header>
+                <header>Completeness (rightfully accepted tests)</header>
                 <p class="is-center" style="font-size: 2rem;">
                     {{ checker.stats.accept_correct }}/{{ checker.stats.accept_total }}
                 </p>
             </div>
         </div>
-        <div class="col-6">
+        <div class="col-4">
             <div class="card">
-                <header>Rejected (invalid proofs)</header>
+                <header>Soundness (rightfully rejected tests)</header>
                 <p class="is-center" style="font-size: 2rem;">
                     {{ checker.stats.reject_correct }}/{{ checker.stats.reject_total }}
+                </p>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card">
+                <header>Declined tests</header>
+                <p class="is-center" style="font-size: 2rem;">
+                    {{ checker.stats.declined_count }}
                 </p>
             </div>
         </div>
