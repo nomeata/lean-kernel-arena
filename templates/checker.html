@@ -109,7 +109,7 @@ section pre, details pre {
     </table>
 
     {% for result in results %}
-    <h3 id="test-{{ result.test }}">{{ result.test }}</h3>
+    <h4 id="test-{{ result.test }}">{{ result.test }}</h4>
     
     <p><b>Test details:</b>
         <span class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.expected }}</span>
