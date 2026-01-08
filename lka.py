@@ -572,7 +572,7 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
     results = []
     for checker in checkers:
         for test in tests:
-            print(f"Running {checker['name']} on {test['name']}...", end="\n" if VERBOSE else " ")
+            print(f"Running {checker['name']} on {test['name']}...", end="\n" if VERBOSE else " ", flush=True)
             result = run_checker_on_test(checker, test, build_dir, tests_dir, results_dir)
             results.append(result)
             print(f"[{result['status']}]")

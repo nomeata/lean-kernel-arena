@@ -9,7 +9,8 @@ build: |
      "use_stdin": true,
      "nat_extension": true,
      "string_extension": true,
-     "unpermitted_axiom_hard_error": false
+     "unpermitted_axiom_hard_error": false,
+     "permitted_axioms": ["propext", "Classical.choice", "Quot.sound", "Lean.trustCompiler"]
    }
   __END__
 run: |
