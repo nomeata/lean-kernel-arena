@@ -54,7 +54,9 @@ Results stored as `_results/{checker}_{test}.json`:
   "test": "test-name", 
   "status": "accepted|rejected|declined|error",
   "exit_code": 0,
-  "duration": 1.23,
+  "wall_time": 1.23,
+  "cpu_time": 1.18,
+  "max_rss": 1048576,
   "stdout": "...",
   "stderr": "..."
 }

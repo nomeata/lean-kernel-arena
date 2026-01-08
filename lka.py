@@ -702,7 +702,6 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
             "status": "error",
             "message": f"Test file not found: {test_file}",
             "exit_code": -1,
-            "duration": 0,
             "wall_time": 0,
             "cpu_time": 0,
             "max_rss": 0,
@@ -747,7 +746,6 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
         "test": test_name,
         "status": status,
         "exit_code": exit_code,
-        "duration": result.wall_time,  # Keep for backward compatibility
         "wall_time": result.wall_time,
         "cpu_time": result.cpu_time,
         "max_rss": result.max_rss,
@@ -873,7 +871,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     - reject_correct: number of tests with outcome=reject that checker rejected
     - reject_total: number of tests with outcome=reject that weren't declined
     - declined_count: number of tests that checker declined
-    - mathlib_time: duration for the mathlib test (or None)
+    - mathlib_time: wall time for the mathlib test (or None)
     - mathlib_cpu_time: CPU time for the mathlib test (or None)
     - mathlib_max_rss: Max RSS for the mathlib test (or None)
     """
@@ -902,8 +900,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         
         # Track mathlib performance metrics
         if test_name == "mathlib":
-            # Use new metrics if available, fallback to old duration field
-            mathlib_time = result.get("wall_time") or result.get("duration")
+            mathlib_time = result.get("wall_time")
             mathlib_cpu_time = result.get("cpu_time")
             mathlib_max_rss = result.get("max_rss")
         

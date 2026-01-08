@@ -105,7 +105,7 @@ section pre, details pre {
                 <td class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}">
                     {{ result.status }}
                 </td>
-                <td class="text-right">{{ format_duration(result.wall_time or result.duration or 0) }}</td>
+                <td class="text-right">{{ format_duration(result.wall_time or 0) }}</td>
                 <td class="text-right">
                     {% if result.cpu_time and result.cpu_time > 0 %}
                         {{ format_duration(result.cpu_time) }}
@@ -146,7 +146,7 @@ section pre, details pre {
       <b>Test result:</b>
         <span class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.status }}</span>
         · exit code {{ result.exit_code }}
-        · wall: {{ format_duration(result.wall_time or result.duration or 0) }}
+        · wall: {{ format_duration(result.wall_time or 0) }}
         {% if result.cpu_time and result.cpu_time > 0 %}
         · cpu: {{ format_duration(result.cpu_time) }}
         {% endif %}
