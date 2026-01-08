@@ -20,7 +20,7 @@
 
 {% block content %}
 <section>
-    <img src="static/kernel-arena-banner.jpg" alt="Lean Kernel Arena Banner" class="banner">
+    <img src="static/kernel-arena-banner.jpg" alt="Lean Kernel Arena" class="banner">
     
     <p>
         The <strong>Lean Kernel Arena</strong> presents, tests and benchmarks proof checkers for the <a href="https://lean-lang.org/">Lean Theorem Prover</a>.
@@ -93,7 +93,7 @@
     </p>
 
     <p>
-        The processing time is for the <tt>mathlib</tt> test, the largest correct test in the suite.
+        The time and space measurements refer to the <tt>mathlib</tt> test case, the largest correct test in the suite. Currently, the checkers are executed on a shared machine, so timing is not very precise.
     </p>
 
     <p>
@@ -102,6 +102,10 @@
 
     <p>
         For more details on the interface for external checks, and how to submit these, see the project's <a href="https://github.com/leanprover/lean-kernel-arena"><tt>README.md</tt> file</a>.
+    </p>
+
+    <p>
+        We are interested in extending our test suite, in particular tests that should be rejected are a useful help for authors of new kernel checkers.
     </p>
 
 </section>
