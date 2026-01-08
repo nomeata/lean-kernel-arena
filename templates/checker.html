@@ -4,7 +4,11 @@
 
 {% block title %}{{ checker.name }} - Lean Kernel Arena{% endblock %}
 
-{% block h1 %}<a href="../../">Lean Kernel Arena</a> / {{ checker.name }}{% endblock %}
+{% block h1 %}<a href="../../">Lean Kernel Arena</a> / {{ checker.name }}
+    {% if checker.url %}
+    <a href="{{ checker.url }}"><img src="../../static/github-mark.svg" style="height: 0.7em" alt="GitHub"/></a>
+    {% endif %}
+{% endblock %}
 
 {% block style %}
 .bg-success { background-color: #d4edda; }
@@ -43,9 +47,6 @@ section pre, details pre {
     <div class="yaml-block">
         <pre><code>{{ checker_yaml }}</code></pre>
     </div>
-    {% if checker.url %}
-    <p><a href="{{ checker.url }}" class="button outline">View on GitHub</a></p>
-    {% endif %}
 </section>
 
 <section>
