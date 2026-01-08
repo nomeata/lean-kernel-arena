@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/leanprover/lean-kernel-arena/schemas/checker.json",
+  "title": "Lean Kernel Arena Checker Configuration",
+  "description": "Schema for checker YAML configuration files",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Version identifier for the checker"
+    },
+    "url": {
+      "type": "string",
+      "format": "uri", 
+      "description": "Git repository URL to clone"
+    },
+    "ref": {
+      "type": "string",
+      "description": "Git branch or tag to checkout"
+    },
+    "rev": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{7,40}$", 
+      "description": "Git commit hash to checkout"
+    },
+    "dir": {
+      "type": "string",
+      "description": "Local directory path relative to checkers/ directory"
+    },
+    "build": {
+      "type": "string",
+      "description": "Shell command to build the checker"
+    },
+    "run": {
+      "type": "string", 
+      "description": "Shell command to run the checker. $IN variable points to input test file"
+    }
+  },
+  "required": ["run"],
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "title": "Git repository checker",
+      "required": ["url", "build", "run"],
+      "not": {
+        "required": ["dir"]
+      }
+    },
+    {
+      "title": "Local directory checker", 
+      "required": ["dir", "run"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] }
+        ]
+      }
+    },
+    {
+      "title": "Simple checker with build (no source)",
+      "required": ["build", "run"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["dir"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] }
+        ]
+      }
+    },
+    {
+      "title": "Simple checker (no source, no build)",
+      "required": ["run"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["dir"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] },
+          { "required": ["build"] }
+        ]
+      }
+    }
+  ]
+}

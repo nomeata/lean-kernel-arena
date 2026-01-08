@@ -12,6 +12,7 @@
           python3
           python3Packages.jinja2
           python3Packages.pyyaml
+          python3Packages.jsonschema
           elan
           rustc 
           cargo

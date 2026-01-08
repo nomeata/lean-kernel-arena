@@ -1,0 +1,114 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/leanprover/lean-kernel-arena/schemas/test.json",
+  "title": "Lean Kernel Arena Test Configuration",
+  "description": "Schema for test YAML configuration files",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Git repository URL to clone"
+    },
+    "ref": {
+      "type": "string",
+      "description": "Git branch or tag to checkout"
+    },
+    "rev": {
+      "type": "string", 
+      "pattern": "^[a-fA-F0-9]{7,40}$",
+      "description": "Git commit hash to checkout"
+    },
+    "dir": {
+      "type": "string",
+      "description": "Local directory path relative to project root"
+    },
+    "file": {
+      "type": "string",
+      "description": "Static file path relative to project root"
+    },
+    "module": {
+      "type": "string",
+      "description": "Lean module name to export (requires lean4export)"
+    },
+    "run": {
+      "type": "string",
+      "description": "Shell command to generate test data. $OUT variable points to output file"
+    },
+    "pre-build": {
+      "type": "string", 
+      "description": "Command to run before building (e.g., cache setup)"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["accept", "reject"],
+      "description": "Expected test outcome for correctness checking"
+    }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "title": "Git repository with run command",
+      "required": ["url", "run"],
+      "not": { 
+        "anyOf": [
+          { "required": ["module"] },
+          { "required": ["file"] },
+          { "required": ["dir"] }
+        ]
+      }
+    },
+    {
+      "title": "Git repository with module export", 
+      "required": ["url", "module"],
+      "not": {
+        "anyOf": [
+          { "required": ["run"] },
+          { "required": ["file"] },
+          { "required": ["dir"] }
+        ]
+      }
+    },
+    {
+      "title": "Static file",
+      "required": ["file"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["dir"] },
+          { "required": ["module"] },
+          { "required": ["run"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] },
+          { "required": ["pre-build"] }
+        ]
+      }
+    },
+    {
+      "title": "Local directory with run command",
+      "required": ["dir", "run"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["file"] },
+          { "required": ["module"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] }
+        ]
+      }
+    },
+    {
+      "title": "Local directory with module export",
+      "required": ["dir", "module"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["file"] },
+          { "required": ["run"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] }
+        ]
+      }
+    }
+  ]
+}

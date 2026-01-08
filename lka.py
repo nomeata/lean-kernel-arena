@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 import yaml
+import jsonschema
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # Global verbose flag
@@ -29,6 +30,36 @@ PERF_UNITS = {
 def get_project_root() -> Path:
     """Get the project root directory."""
     return Path(__file__).parent.resolve()
+
+
+def load_schema(schema_name: str) -> dict:
+    """Load a JSON schema file."""
+    schema_file = get_project_root() / "schemas" / f"{schema_name}.json"
+    if not schema_file.exists():
+        raise FileNotFoundError(f"Schema file not found: {schema_file}")
+    with open(schema_file, "r") as f:
+        return json.load(f)
+
+
+def validate_yaml_data(data: dict, schema_name: str, file_path: Path) -> None:
+    """Validate YAML data against a schema."""
+    try:
+        schema = load_schema(schema_name)
+        jsonschema.validate(data, schema)
+    except jsonschema.ValidationError as e:
+        # Format a helpful error message
+        error_path = " -> ".join(str(p) for p in e.absolute_path) if e.absolute_path else "root"
+        print(f"Schema validation error in {file_path}:")
+        print(f"  Path: {error_path}")
+        print(f"  Error: {e.message}")
+        if e.validator_value:
+            print(f"  Expected: {e.validator_value}")
+        if hasattr(e, 'instance') and e.instance is not None:
+            print(f"  Found: {e.instance}")
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def format_duration(seconds: float) -> str:
@@ -297,14 +328,18 @@ def run_cmd(
     return result
 
 
-def load_yaml_files(directory: Path) -> list[dict]:
-    """Load all YAML files from a directory."""
+def load_yaml_files(directory: Path, schema_name: str) -> list[dict]:
+    """Load all YAML files from a directory with schema validation."""
     items = []
     if not directory.exists():
         return items
     for file in directory.glob("*.yaml"):
         with open(file, "r") as f:
             data = yaml.safe_load(f)
+            
+            # Validate against schema before processing
+            validate_yaml_data(data, schema_name, file)
+            
             data["_file"] = file.name
             # Derive name from filename (without .yaml extension)
             data["name"] = file.stem
@@ -314,12 +349,12 @@ def load_yaml_files(directory: Path) -> list[dict]:
 
 def load_tests() -> list[dict]:
     """Load all test definitions."""
-    return load_yaml_files(get_project_root() / "tests")
+    return load_yaml_files(get_project_root() / "tests", "test")
 
 
 def load_checkers() -> list[dict]:
     """Load all checker definitions."""
-    return load_yaml_files(get_project_root() / "checkers")
+    return load_yaml_files(get_project_root() / "checkers", "checker")
 
 
 def find_test_by_name(name: str) -> dict | None:
