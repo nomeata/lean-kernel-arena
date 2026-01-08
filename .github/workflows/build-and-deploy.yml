@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest-large
+    runs-on: nscloud-ubuntu-22.04-amd64-8x16
     
     permissions:
       contents: read
