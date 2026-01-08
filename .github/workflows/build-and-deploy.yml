@@ -25,24 +25,24 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Setup nix shell
-        run: |
-          nix develop -c true
+        run:  true
+        shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Generate tests
-        run: |
-          nix develop -c ./lka.py create-test
+        run: ./lka.py create-test
+        shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Build checkers
-        run: |
-          nix develop -c ./lka.py build-checker
+        run: ./lka.py build-checker
+        shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Run checkers on tests
-        run: |
-          nix develop -c ./lka.py run-checker
+        run: ./lka.py run-checker
+        shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Generate website
-        run: |
-          nix develop -c ./lka.py build-site
+        run: ./lka.py build-site
+        shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
