@@ -339,27 +339,39 @@ def find_checker_by_name(name: str) -> dict | None:
 
 
 # =============================================================================
-# create-test command
+# Source setup - shared by tests and checkers
 # =============================================================================
 
 
-def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
-    """Set up the working directory for a test.
+def setup_source_directory(
+    config: dict, 
+    base_dir: Path, 
+    local_base_path: Path | None = None
+) -> Path | None:
+    """Set up a source directory for tests or checkers.
     
     Handles three cases:
     - url: Clone a git repository
     - dir: Use a local directory
     - neither: Create an empty directory
     
+    Args:
+        config: Test or checker configuration dict with name, url, dir, ref, rev
+        base_dir: Base directory where the work/build directory should be created
+        local_base_path: Base path for local directories (defaults to project root)
+    
     Returns the working directory path, or None on failure.
     """
-    name = test["name"]
-    url = test.get("url")
-    local_dir = test.get("dir")
-    ref = test.get("ref")
-    rev = test.get("rev")
+    name = config["name"]
+    url = config.get("url")
+    local_dir = config.get("dir")
+    ref = config.get("ref")
+    rev = config.get("rev")
 
-    work_dir = output_dir / "work" / name
+    if local_base_path is None:
+        local_base_path = get_project_root()
+
+    work_dir = base_dir / name
     
     # Clean up existing work directory
     if work_dir.exists():
@@ -392,7 +404,7 @@ def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
 
     elif local_dir:
         # Use a local directory (copy it to work dir)
-        source_dir = get_project_root() / local_dir
+        source_dir = local_base_path / local_dir
         if not source_dir.exists():
             print(f"  Source directory not found: {source_dir}")
             return None
@@ -407,6 +419,24 @@ def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
         repo_dir = work_dir / "repo"
         repo_dir.mkdir(parents=True, exist_ok=True)
         return repo_dir
+
+
+# =============================================================================
+# create-test command
+# =============================================================================
+
+
+def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
+    """Set up the working directory for a test.
+    
+    Handles three cases:
+    - url: Clone a git repository
+    - dir: Use a local directory
+    - neither: Create an empty directory
+    
+    Returns the working directory path, or None on failure.
+    """
+    return setup_source_directory(test, output_dir / "work")
 
 
 def create_test(test: dict, output_dir: Path) -> bool:
@@ -590,62 +620,28 @@ def build_checker(checker: dict, build_dir: Path) -> bool:
     """Build a single checker."""
     name = checker["name"]
     version = checker.get("version", "unknown")
-    url = checker.get("url")
-    local_dir = checker.get("dir")
-    ref = checker.get("ref")
-    rev = checker.get("rev")
     build_cmd = checker.get("build")
 
     print(f"Building checker: {name} (version: {version})")
 
-    checker_dir = build_dir / name
-    checker_dir.mkdir(parents=True, exist_ok=True)
+    # Set up source directory (for checkers, local dirs are relative to checkers/ subfolder)
+    local_base_path = get_project_root() / "checkers" if checker.get("dir") else get_project_root()
+    work_dir = setup_source_directory(checker, build_dir, local_base_path)
+    if work_dir is None:
+        return False
 
-    # Clone repository if URL is provided
-    if url:
-        repo_dir = checker_dir / "repo"
-        if repo_dir.exists():
-            shutil.rmtree(repo_dir)
-
-        print(f"  Cloning {url}...")
-        clone_cmd = ["git", "clone", "--depth=1"]
-        if ref:
-            clone_cmd.extend(["--branch", ref])
-        clone_cmd.extend([url, str(repo_dir)])
-
-        result = run_cmd(clone_cmd)
-        if result.returncode != 0:
-            print(f"  Error cloning: {result.stderr}")
-            return False
-
-        # Checkout specific revision if specified
-        if rev:
-            result = run_cmd(["git", "checkout", rev], cwd=repo_dir)
-            if result.returncode != 0:
-                print(f"  Error checking out {rev}: {result.stderr}")
-                return False
-
-        work_dir = repo_dir
-    elif local_dir:
-        # Use a local directory (copy it to work dir)
-        source_dir = get_project_root() / "checkers" / local_dir
-        if not source_dir.exists():
-            print(f"  Source directory not found: {source_dir}")
-            return False
-        
-        repo_dir = checker_dir / "repo"
-        if repo_dir.exists():
-            shutil.rmtree(repo_dir)
-        shutil.copytree(source_dir, repo_dir)
-        print(f"  Copied {source_dir} to {repo_dir}")
-        work_dir = repo_dir
+    # Determine the actual working directory for build commands
+    if checker.get("url") or checker.get("dir"):
+        # Git repos and local dirs are copied to repo/ subdirectory
+        actual_work_dir = work_dir
     else:
-        work_dir = checker_dir
+        # Empty directory case - use the checker directory directly
+        actual_work_dir = build_dir / name
 
     # Run build command if specified
     if build_cmd:
         print(f"  Building: {build_cmd}")
-        result = run_cmd(build_cmd, cwd=work_dir, shell=True)
+        result = run_cmd(build_cmd, cwd=actual_work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Build failed: {result.stderr}")
             return False
@@ -977,6 +973,49 @@ def get_build_metadata() -> dict:
     return metadata
 
 
+def generate_source_links(config: dict, config_type: str, git_revision: str | None = None) -> dict:
+    """Generate Declaration and Source links for a test or checker configuration.
+    
+    Args:
+        config: Test or checker configuration dict
+        config_type: "tests" or "checkers" 
+        git_revision: Git revision for GitHub links
+        
+    Returns dict with:
+        declaration_url: Link to the YAML file in GitHub
+        source_url: Link to the source (either URL or local dir in GitHub)
+    """
+    links = {
+        "declaration_url": None,
+        "source_url": None,
+    }
+    
+    if not git_revision:
+        return links
+    
+    # Generate declaration URL (YAML file in GitHub)
+    base_github_url = "https://github.com/leanprover/lean-kernel-arena"
+    declaration_path = f"{config_type}/{config['name']}.yaml"
+    links["declaration_url"] = f"{base_github_url}/blob/{git_revision}/{declaration_path}"
+    
+    # Generate source URL
+    url = config.get("url")
+    local_dir = config.get("dir")
+    
+    if url:
+        # External repository
+        links["source_url"] = url
+    elif local_dir:
+        # Local directory in this repository
+        if config_type == "checkers":
+            source_path = f"checkers/{local_dir}"
+        else:
+            source_path = local_dir
+        links["source_url"] = f"{base_github_url}/tree/{git_revision}/{source_path}"
+    
+    return links
+
+
 def cmd_build_site(args: argparse.Namespace) -> int:
     """Handle the build-site command."""
     output_dir = Path(args.outdir)
@@ -1030,12 +1069,8 @@ def cmd_build_site(args: argparse.Namespace) -> int:
             checker_dir = output_dir / "checker" / checker["name"]
             checker_dir.mkdir(parents=True, exist_ok=True)
             
-            # Read the raw YAML file for display
-            checker_yaml_path = get_project_root() / "checkers" / f"{checker['name']}.yaml"
-            checker_yaml = ""
-            if checker_yaml_path.exists():
-                with open(checker_yaml_path, "r") as f:
-                    checker_yaml = f.read()
+            # Generate checker links
+            checker_links = generate_source_links(checker, "checkers", build_info.get("git_revision"))
             
             # Gather results for this checker
             checker_results = []
@@ -1047,16 +1082,13 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                     # Add test stats
                     if test["name"] in test_stats:
                         result["test_stats"] = test_stats[test["name"]]
-                    # Add test YAML content
-                    test_yaml_path = get_project_root() / "tests" / f"{test['name']}.yaml"
-                    if test_yaml_path.exists():
-                        with open(test_yaml_path, "r") as f:
-                            result["test_yaml"] = f.read()
+                    # Add test links
+                    result["test_links"] = generate_source_links(test, "tests", build_info.get("git_revision"))
                     checker_results.append(result)
             
             checker_data = {
                 "checker": checker,
-                "checker_yaml": checker_yaml,
+                "checker_links": checker_links,
                 "results": checker_results,
                 "format_duration": format_duration,
                 "format_memory": format_memory,
@@ -1066,9 +1098,6 @@ def cmd_build_site(args: argparse.Namespace) -> int:
             output_file = checker_dir / "index.html"
             checker_template.stream(checker_data).dump(str(output_file))
             print(f"Generated: {output_file}")
-    except Exception as e:
-        print(f"Error rendering checker template: {e}")
-        return 1
     except Exception as e:
         print(f"Error rendering checker template: {e}")
         return 1
