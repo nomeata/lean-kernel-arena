@@ -491,6 +491,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
     module = test.get("module")
     run_cmd_str = test.get("run")
     file_path = test.get("file")
+    lean_file_path = test.get("leanfile")
     pre_build = test.get("pre-build")
 
     # Determine test type based on fields present
@@ -498,10 +499,12 @@ def create_test(test: dict, output_dir: Path) -> bool:
         test_type = "module"
     elif run_cmd_str:
         test_type = "run"
+    elif lean_file_path:
+        test_type = "leanfile"
     elif file_path:
         test_type = "file"
     else:
-        print(f"  Error: Test {name} must have 'module', 'run', or 'file' field")
+        print(f"  Error: Test {name} must have 'module', 'run', 'leanfile', or 'file' field")
         return False
 
     print(f"Creating test: {name} (type: {test_type})")
@@ -566,7 +569,75 @@ def create_test(test: dict, output_dir: Path) -> bool:
         lean4export_bin = lean4export_dir / ".lake" / "build" / "bin" / "lean4export"
         export_cmd = f"lake env {lean4export_bin} {module} > {tmp_file}"
 
-        result = run_cmd(export_cmd, cwd=work_dir, shell=True)
+        
+        result = run_cmd(export_cmd, cwd=actual_work_dir, shell=True)
+        if result.returncode != 0:
+            print(f"  Export failed: {result.stderr}")
+            return False
+
+    elif lean_file_path:
+        # Handle leanfile variant: copy lean file to work directory and compile
+        
+        # Copy the lean file to the work directory with a hardcoded name "Test.lean"
+        source_file = get_project_root() / lean_file_path
+        if not source_file.exists():
+            print(f"  Source file not found: {source_file}")
+            return False
+        
+        # For lakefile approach, copy to work directory root, not src subdirectory
+        actual_work_dir = work_dir.parent
+        dest_file = actual_work_dir / "Test.lean"
+        shutil.copy(source_file, dest_file)
+        print(f"  Copied {source_file} to {dest_file}")
+        
+        # Set up lean4export in a sibling directory (same as module variant)
+        lean4export_dir = work_dir.parent / "lean4export"
+        if not lean4export_dir.exists():
+            print(f"  Cloning lean4export...")
+            clone_cmd = ["git", "clone", "--branch", "json_output",
+                        "https://github.com/ammkrn/lean4export",
+                        str(lean4export_dir)]
+            result = run_cmd(clone_cmd)
+            if result.returncode != 0:
+                print(f"  Error cloning lean4export: {result.stderr}")
+                return False
+
+            print(f"  Building lean4export...")
+            result = run_cmd("lake build", cwd=lean4export_dir, shell=True)
+            if result.returncode != 0:
+                print(f"  Error building lean4export: {result.stderr}")
+                return False
+
+        # Copy lean-toolchain from lean4export to work directory
+        toolchain_file = lean4export_dir / "lean-toolchain"
+        dest_toolchain = actual_work_dir / "lean-toolchain"
+        if toolchain_file.exists():
+            shutil.copy(toolchain_file, dest_toolchain)
+            print(f"  Copied lean-toolchain to work directory")
+
+        # Create a trivial lakefile in the work directory
+        lakefile_content = '''name = "test"
+
+[[lean_lib]]
+name = "Test"'''
+        lakefile_path = actual_work_dir / "lakefile.toml"
+        with open(lakefile_path, "w") as f:
+            f.write(lakefile_content)
+        print(f"  Created trivial lakefile")
+
+        # Build the Test module using lake (similar to module variant)
+        print(f"  Building Test module with lake...")
+        result = run_cmd("lake build Test", cwd=actual_work_dir, shell=True)
+        if result.returncode != 0:
+            print(f"  Build failed: {result.stderr}")
+            return False
+
+        # Export using lean4export with lake env (same as module variant)
+        print(f"  Exporting Test module...")
+        lean4export_bin = lean4export_dir / ".lake" / "build" / "bin" / "lean4export"
+        export_cmd = f"lake env {lean4export_bin} Test > {tmp_file}"
+
+        result = run_cmd(export_cmd, cwd=actual_work_dir, shell=True)
         if result.returncode != 0:
             print(f"  Export failed: {result.stderr}")
             return False

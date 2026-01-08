@@ -31,6 +31,10 @@
       "type": "string",
       "description": "Static file path relative to project root"
     },
+    "leanfile": {
+      "type": "string",
+      "description": "Lean source file path relative to project root (compiles with lean4export toolchain)"
+    },
     "module": {
       "type": "string",
       "description": "Lean module name to export (requires lean4export)"
@@ -58,6 +62,7 @@
         "anyOf": [
           { "required": ["module"] },
           { "required": ["file"] },
+          { "required": ["leanfile"] },
           { "required": ["dir"] }
         ]
       }
@@ -69,6 +74,7 @@
         "anyOf": [
           { "required": ["run"] },
           { "required": ["file"] },
+          { "required": ["leanfile"] },
           { "required": ["dir"] }
         ]
       }
@@ -82,6 +88,23 @@
           { "required": ["dir"] },
           { "required": ["module"] },
           { "required": ["run"] },
+          { "required": ["leanfile"] },
+          { "required": ["ref"] },
+          { "required": ["rev"] },
+          { "required": ["pre-build"] }
+        ]
+      }
+    },
+    {
+      "title": "Lean source file",
+      "required": ["leanfile"],
+      "not": {
+        "anyOf": [
+          { "required": ["url"] },
+          { "required": ["dir"] },
+          { "required": ["module"] },
+          { "required": ["run"] },
+          { "required": ["file"] },
           { "required": ["ref"] },
           { "required": ["rev"] },
           { "required": ["pre-build"] }
@@ -95,6 +118,7 @@
         "anyOf": [
           { "required": ["url"] },
           { "required": ["file"] },
+          { "required": ["leanfile"] },
           { "required": ["module"] },
           { "required": ["ref"] },
           { "required": ["rev"] }
@@ -108,6 +132,7 @@
         "anyOf": [
           { "required": ["url"] },
           { "required": ["file"] },
+          { "required": ["leanfile"] },
           { "required": ["run"] },
           { "required": ["ref"] },
           { "required": ["rev"] }
