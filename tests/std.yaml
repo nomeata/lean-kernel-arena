@@ -3,6 +3,7 @@ description: |
   
   This test contains the standard library extensions beyond core Lean 4,
   including:
+  
   - Enhanced data structures (HashMap, RBTree, etc.)
   - Additional mathematical operations
   - Extended list and array operations

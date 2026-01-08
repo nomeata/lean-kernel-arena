@@ -4,6 +4,7 @@ description: |
   
   This checker only validates that the exported data can be parsed correctly
   without performing full kernel checking. It's useful for:
+  
   - Testing export format compatibility
   - Measuring parsing performance separately from verification
   - Debugging export data corruption issues

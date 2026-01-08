@@ -2,6 +2,7 @@ description: |
   The `Init` module export from Lean 4 core.
   
   This test contains the fundamental building blocks of Lean 4, including:
+  
   - Basic data types (Nat, List, Array, String, etc.)
   - Core tactics and syntax
   - Foundational mathematical structures

@@ -3,6 +3,7 @@ description: |
   A **trivial checker** that always rejects any input.
   
   This checker simply runs `exit 1` and is useful for:
+  
   - Testing framework handling of rejected proofs
   - Validating error reporting and status tracking
   - Establishing baseline performance for failed checks

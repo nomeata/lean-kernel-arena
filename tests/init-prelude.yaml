@@ -3,6 +3,7 @@ description: |
   
   This test contains the absolute minimal set of definitions needed to
   bootstrap Lean 4, including:
+  
   - Core types (Bool, Nat, Prop, Type)
   - Basic logical operations
   - Primitive tactics (rfl, apply, etc.)

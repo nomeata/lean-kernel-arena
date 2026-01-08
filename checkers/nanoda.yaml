@@ -4,6 +4,7 @@ description: |
   
   This is an independent proof checker that validates Lean 4 exports
   using a different implementation approach. Features:
+  
   - Written in Rust for performance
   - Supports standard Lean 4 axioms (propext, choice, etc.)
   - Configurable axiom checking policy
