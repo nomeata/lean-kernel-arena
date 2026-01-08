@@ -468,7 +468,7 @@ def setup_source_directory(
 
 
 # =============================================================================
-# create-test command
+# build-test command
 # =============================================================================
 
 
@@ -628,8 +628,8 @@ def create_test(test: dict, output_dir: Path) -> bool:
     return True
 
 
-def cmd_create_test(args: argparse.Namespace) -> int:
-    """Handle the create-test command."""
+def cmd_build_test(args: argparse.Namespace) -> int:
+    """Handle the build-test command."""
     output_dir = get_project_root() / "_build" / "tests"
 
     if args.name:
@@ -1097,20 +1097,21 @@ def cmd_build_site(args: argparse.Namespace) -> int:
         checker["stats"] = compute_checker_stats(checker, tests, results)
 
     # Sort checkers by the specified criteria:
-    # 1. Number of correctly rejected tests, descending
-    # 2. Number of correctly accepted tests, descending  
-    # 3. Wall time for processing mathlib, ascending (None values last)
+    # 1. Number of bad tests not rejected (ascending - fewer mistakes is better)
+    # 2. Number of good tests not accepted (ascending - fewer mistakes is better)  
+    # 3. Number of tests declined (ascending - fewer declines is better)
+    # 4. Wall time for processing mathlib (ascending, with None values last)
     def sort_key(checker):
         stats = checker["stats"]
-        reject_correct = stats["reject_correct"]
-        accept_correct = stats["accept_correct"]
+        bad_not_rejected = stats["reject_total"] - stats["reject_correct"]  # Should be low
+        good_not_accepted = stats["accept_total"] - stats["accept_correct"]  # Should be low
+        declined_count = stats["declined_count"]  # Should be low
         mathlib_time = stats["mathlib_time"]
         
         # For mathlib_time: None values should be treated as infinity (sort last)
-        # We use a tuple where None becomes a very large number for ascending sort
         time_sort_key = mathlib_time if mathlib_time is not None else float('inf')
         
-        return (-reject_correct, -accept_correct, time_sort_key)
+        return (bad_not_rejected, good_not_accepted, declined_count, time_sort_key)
     
     checkers.sort(key=sort_key)
 
@@ -1212,15 +1213,15 @@ def main() -> int:
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # create-test command
-    create_test_parser = subparsers.add_parser(
-        "create-test",
-        help="Create test files from test definitions",
+    # build-test command
+    build_test_parser = subparsers.add_parser(
+        "build-test",
+        help="Build test files from test definitions",
     )
-    create_test_parser.add_argument(
+    build_test_parser.add_argument(
         "name",
         nargs="?",
-        help="Name of the test to create (default: all tests)",
+        help="Name of the test to build (default: all tests)",
     )
 
     # build-checker command
@@ -1268,8 +1269,8 @@ def main() -> int:
         parser.print_help()
         return 0
 
-    if args.command == "create-test":
-        return cmd_create_test(args)
+    if args.command == "build-test":
+        return cmd_build_test(args)
     elif args.command == "build-checker":
         return cmd_build_checker(args)
     elif args.command == "run-checker":

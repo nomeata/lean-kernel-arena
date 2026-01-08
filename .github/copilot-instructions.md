@@ -21,7 +21,7 @@ This is a **benchmarking framework for Lean kernel implementations** that tests 
 
 ### Development Commands (use `nix develop` shell)
 ```bash
-./lka.py create-test [name]     # Generate test files from YAML definitions
+./lka.py build-test [name]      # Generate test files from YAML definitions
 ./lka.py build-checker [name]   # Build checker executables
 ./lka.py run-checker            # Execute all checkers on all tests
 ./lka.py build-site             # Generate website from results
@@ -33,18 +33,11 @@ This is a **benchmarking framework for Lean kernel implementations** that tests 
 - **Name derivation**: File stem becomes the entity name (no explicit `name` field needed)
 - **Stats tracking**: File sizes, line counts with SI prefixes (5.6M lines, 290.7 MB)
 
-### Test Definition Patterns
-```yaml
-# Git repository with custom run command
-url: https://github.com/repo/name
-ref: branch_or_tag
-run: lake build && lake exe tool > $OUT
-
-# Module export via lean4export
-url: https://github.com/leanprover-community/mathlib4
-module: Mathlib
-pre-build: lake exe cache get
-```
+### Configuration Schema
+- **Test configurations**: See `schemas/test.json` for complete YAML validation schema
+- **Checker configurations**: See `schemas/checker.json` for complete YAML validation schema
+- **Schema validation**: Enforced automatically with helpful error messages
+- **Common patterns**: Git repositories, local directories, module exports via lean4export
 
 ### Result Data Structure
 Results stored as `_results/{checker}_{test}.json`:

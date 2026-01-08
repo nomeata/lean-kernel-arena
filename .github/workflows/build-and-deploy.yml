@@ -29,7 +29,7 @@ jobs:
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Generate tests
-        run: ./lka.py create-test
+        run: ./lka.py build-test
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Build checkers
