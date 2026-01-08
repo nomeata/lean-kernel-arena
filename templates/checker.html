@@ -54,7 +54,7 @@ section pre, details pre {
 {% block content %}
 <section>
     <header>
-        <h3>Checker "{{ checker.name }}"</h3>
+        <h2>Checker "{{ checker.name }}"</h2>
     </header>
     <p>
         {% if checker.version %}<strong>Version:</strong> {{ checker.version }}{% endif %}
@@ -67,17 +67,13 @@ section pre, details pre {
         <a href="{{ checker_links.source_url }}" target="_blank">🔗 Source</a>
         {% endif %}
     </p>
+
     {% if checker.description %}
     <div class="description">
         {{ checker.description }}
     </div>
     {% endif %}
-</section>
 
-<section>
-    <header>
-        <h3>Statistics</h3>
-    </header>
     <div class="row">
         <div class="col-4">
             <div class="card">
@@ -104,12 +100,7 @@ section pre, details pre {
             </div>
         </div>
     </div>
-</section>
-
-<section>
-    <header>
-        <h3>Test Results</h3>
-    </header>
+    
     {% if results %}
     <table class="striped">
         <thead>
@@ -149,9 +140,14 @@ section pre, details pre {
             {% endfor %}
         </tbody>
     </table>
+</section>
+<section>
+  <header>
+    <h2>Detailed results</h2>
+  </header>
 
     {% for result in results %}
-    <h4 id="test-{{ result.test }}">Test "{{ result.test }}"</h4>
+    <h3 id="test-{{ result.test }}">Test "{{ result.test }}"</h3>
     
     <p>
         <strong>Expected:</strong> <span class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.expected }}</span>
@@ -192,9 +188,6 @@ section pre, details pre {
     {% if result.stderr %}
     <h5>stderr:</h5>
     <pre>{{ result.stderr }}</pre>
-    {% endif %}
-    {% if not result.stdout and not result.stderr %}
-    <p class="text-grey">No output on stderr or stdout</p>
     {% endif %}
     {% endfor %}
 
