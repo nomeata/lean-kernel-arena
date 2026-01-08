@@ -17,6 +17,7 @@
           elan
           rustc 
           cargo
+          perf
         ];
       };
     };
