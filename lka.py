@@ -5,9 +5,11 @@ import argparse
 import datetime
 import json
 import os
+import resource
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -16,6 +18,12 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 # Global verbose flag
 VERBOSE = False
+
+# Perf measurement units - strict validation, no heuristics
+PERF_UNITS = {
+    "msec": 1e-3,
+    "ns": 1e-9,
+}
 
 
 def get_project_root() -> Path:
@@ -35,14 +43,187 @@ def format_duration(seconds: float) -> str:
         return f"{seconds * 1000:.0f}ms"
 
 
+def format_memory(bytes_value: float) -> str:
+    """Format memory usage in bytes to a human-readable string."""
+    if bytes_value >= 1024 * 1024 * 1024:
+        return f"{bytes_value / (1024 * 1024 * 1024):.1f} GB"
+    elif bytes_value >= 1024 * 1024:
+        return f"{bytes_value / (1024 * 1024):.1f} MB"
+    elif bytes_value >= 1024:
+        return f"{bytes_value / 1024:.1f} KB"
+    else:
+        return f"{bytes_value:.0f} B"
+
+
+def measure_perf_with_fallback(
+    cmd: str | list[str],
+    cwd: Path | None = None,
+    env: dict | None = None,
+    shell: bool = False,
+    capture_output: bool = True,
+) -> tuple[subprocess.CompletedProcess, dict]:
+    """Run a command and measure performance metrics, with fallback if perf is unavailable.
+    
+    Returns:
+        Tuple of (subprocess result, metrics dict)
+        
+    Metrics dict contains:
+    - wall_time: Wall clock time in seconds
+    - cpu_time: CPU time in seconds (if available via perf)
+    - max_rss: Maximum RSS in bytes
+    """
+    # Record wall time manually as fallback
+    start_wall_time = time.time()
+    
+    # Try to use perf if available
+    metrics = {}
+    use_perf = False
+    
+    # Check if perf is available
+    try:
+        perf_check = subprocess.run(
+            ["perf", "--version"], 
+            capture_output=True, 
+            timeout=2
+        )
+        if perf_check.returncode == 0:
+            use_perf = True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        use_perf = False
+    
+    if use_perf:
+        # Use perf for more accurate measurements
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp:
+            tmp_path = tmp.name
+        
+        try:
+            if isinstance(cmd, list):
+                perf_cmd = [
+                    "perf", "stat", "-j", "-o", tmp_path,
+                    "-e", "duration_time",  # wall-clock time
+                    "-e", "task-clock",     # cpu time
+                    "--", *cmd
+                ]
+            else:
+                perf_cmd = [
+                    "perf", "stat", "-j", "-o", tmp_path,
+                    "-e", "duration_time",
+                    "-e", "task-clock",
+                    "--"
+                ]
+                if shell:
+                    perf_cmd.extend(["sh", "-c", cmd])
+                else:
+                    perf_cmd.extend(cmd.split())
+            
+            # Set up environment
+            perf_env = (env or os.environ).copy()
+            perf_env["LC_ALL"] = "C"  # Ensure perf outputs valid JSON
+            
+            # Run with perf
+            result = subprocess.run(
+                perf_cmd,
+                cwd=cwd,
+                env=perf_env,
+                shell=False,  # perf handles shell execution
+                capture_output=capture_output,
+                text=True,
+            )
+            
+            # Parse perf output with strict unit validation
+            perf_metrics = {}
+            try:
+                with open(tmp_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                if "event" in data and "counter-value" in data:
+                                    event = data["event"]
+                                    value = float(data["counter-value"])
+                                    unit = data.get("unit", "")
+                                    
+                                    # Strict unit validation
+                                    if unit in PERF_UNITS:
+                                        value *= PERF_UNITS[unit]
+                                        perf_metrics[event] = value
+                                    elif unit == "":
+                                        # Empty unit - for time events, default is nanoseconds
+                                        if event in ["duration_time", "task-clock"]:
+                                            value *= 1e-9  # Convert nanoseconds to seconds
+                                            perf_metrics[event] = value
+                                        else:
+                                            # For other events with empty unit, assume base unit
+                                            perf_metrics[event] = value
+                                    else:
+                                        # Unknown unit - log if verbose but don't fail
+                                        if VERBOSE:
+                                            print(f"    Unknown perf unit '{unit}' for event '{event}', skipping")
+                            except (json.JSONDecodeError, ValueError, KeyError):
+                                continue
+            except Exception:
+                # If perf parsing fails, we'll fall back to manual timing
+                pass
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(tmp_path)
+                except:
+                    pass
+            
+            # Extract metrics with fallback to manual timing
+            metrics["wall_time"] = perf_metrics.get("duration_time", time.time() - start_wall_time)
+            metrics["cpu_time"] = perf_metrics.get("task-clock", 0.0)
+        
+        except Exception:
+            # If perf fails completely, fall back to manual measurement
+            result = subprocess.run(
+                cmd,
+                cwd=cwd,
+                env=env,
+                shell=shell,
+                capture_output=capture_output,
+                text=True,
+            )
+            metrics["wall_time"] = time.time() - start_wall_time
+            metrics["cpu_time"] = 0.0
+    else:
+        # Fallback: run normally and measure wall time
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env,
+            shell=shell,
+            capture_output=capture_output,
+            text=True,
+        )
+        metrics["wall_time"] = time.time() - start_wall_time
+        metrics["cpu_time"] = 0.0  # Not available without perf
+    
+    # Get rusage for memory info (this captures child process usage)
+    try:
+        final_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        # ru_maxrss is in KB on Linux, bytes on macOS
+        maxrss = final_rusage.ru_maxrss
+        if sys.platform == "linux":
+            maxrss *= 1024  # Convert KB to bytes on Linux
+        metrics["max_rss"] = maxrss
+    except Exception:
+        metrics["max_rss"] = 0.0
+    
+    return result, metrics
+
+
 def run_cmd(
     cmd: str | list[str],
     cwd: Path | None = None,
     env: dict | None = None,
     shell: bool = False,
     capture_output: bool = True,
+    measure_perf: bool = False,
 ) -> subprocess.CompletedProcess:
-    """Run a command with optional verbose output.
+    """Run a command with optional verbose output and performance measurement.
     
     Args:
         cmd: Command to run (string for shell=True, list for shell=False)
@@ -50,9 +231,13 @@ def run_cmd(
         env: Environment variables
         shell: Whether to run as shell command
         capture_output: Whether to capture stdout/stderr
+        measure_perf: Whether to measure detailed performance metrics
     
     Returns:
-        CompletedProcess instance
+        CompletedProcess instance with additional attributes:
+        - wall_time: Wall clock time in seconds
+        - cpu_time: CPU time in seconds (if available)
+        - max_rss: Maximum RSS in bytes (if available)
     """
     global VERBOSE
     
@@ -66,22 +251,48 @@ def run_cmd(
         cwd_str = f" (in {cwd})" if cwd else ""
         print(f"    $ {cmd_str}{cwd_str}")
     
-    start_time = time.time()
-    
-    result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=env,
-        shell=shell,
-        capture_output=capture_output,
-        text=True,
-    )
-    
-    elapsed = time.time() - start_time
-    
-    if VERBOSE:
-        status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
-        print(f"      -> {status} in {format_duration(elapsed)}")
+    if measure_perf:
+        # Use detailed performance measurement
+        result, metrics = measure_perf_with_fallback(
+            cmd, cwd=cwd, env=env, shell=shell, capture_output=capture_output
+        )
+        
+        # Add metrics as attributes to the result
+        result.wall_time = metrics["wall_time"]
+        result.cpu_time = metrics["cpu_time"]
+        result.max_rss = metrics["max_rss"]
+        
+        if VERBOSE:
+            status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
+            metrics_str = f"wall: {format_duration(result.wall_time)}"
+            if result.cpu_time > 0:
+                metrics_str += f", cpu: {format_duration(result.cpu_time)}"
+            if result.max_rss > 0:
+                metrics_str += f", rss: {format_memory(result.max_rss)}"
+            print(f"      -> {status} ({metrics_str})")
+    else:
+        # Use simple timing
+        start_time = time.time()
+        
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env,
+            shell=shell,
+            capture_output=capture_output,
+            text=True,
+        )
+        
+        elapsed = time.time() - start_time
+        
+        # Add basic timing as attributes
+        result.wall_time = elapsed
+        result.cpu_time = 0.0  # Not measured
+        result.max_rss = 0.0   # Not measured
+        
+        if VERBOSE:
+            status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
+            print(f"      -> {status} in {format_duration(elapsed)}")
     
     return result
 
@@ -492,6 +703,9 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
             "message": f"Test file not found: {test_file}",
             "exit_code": -1,
             "duration": 0,
+            "wall_time": 0,
+            "cpu_time": 0,
+            "max_rss": 0,
             "stdout": "",
             "stderr": "",
         }
@@ -511,14 +725,12 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
 
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Run the checker and track time
+    # Run the checker and track detailed performance metrics
     # Set up environment with IN variable pointing to test file
     env = os.environ.copy()
     env["IN"] = str(test_file)
     
-    start_time = time.time()
-    result = run_cmd(checker_run_cmd, cwd=work_dir, shell=True, env=env)
-    duration = time.time() - start_time
+    result = run_cmd(checker_run_cmd, cwd=work_dir, shell=True, env=env, measure_perf=True)
 
     exit_code = result.returncode
     if exit_code == 0:
@@ -535,7 +747,10 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
         "test": test_name,
         "status": status,
         "exit_code": exit_code,
-        "duration": duration,
+        "duration": result.wall_time,  # Keep for backward compatibility
+        "wall_time": result.wall_time,
+        "cpu_time": result.cpu_time,
+        "max_rss": result.max_rss,
         "stdout": result.stdout,
         "stderr": result.stderr,
     }
@@ -659,6 +874,8 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     - reject_total: number of tests with outcome=reject that weren't declined
     - declined_count: number of tests that checker declined
     - mathlib_time: duration for the mathlib test (or None)
+    - mathlib_cpu_time: CPU time for the mathlib test (or None)
+    - mathlib_max_rss: Max RSS for the mathlib test (or None)
     """
     checker_name = checker["name"]
     
@@ -668,6 +885,8 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     reject_total = 0
     declined_count = 0
     mathlib_time = None
+    mathlib_cpu_time = None
+    mathlib_max_rss = None
     
     for test in tests:
         test_name = test["name"]
@@ -681,9 +900,12 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         
         status = result.get("status")
         
-        # Track mathlib time
-        if test_name == "mathlib" and result.get("duration") is not None:
-            mathlib_time = result["duration"]
+        # Track mathlib performance metrics
+        if test_name == "mathlib":
+            # Use new metrics if available, fallback to old duration field
+            mathlib_time = result.get("wall_time") or result.get("duration")
+            mathlib_cpu_time = result.get("cpu_time")
+            mathlib_max_rss = result.get("max_rss")
         
         # Count declined tests
         if status == "declined":
@@ -706,6 +928,8 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         "reject_total": reject_total,
         "declined_count": declined_count,
         "mathlib_time": mathlib_time,
+        "mathlib_cpu_time": mathlib_cpu_time,
+        "mathlib_max_rss": mathlib_max_rss,
     }
 
 
@@ -788,6 +1012,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
         "tests": tests,
         "checkers": checkers,
         "format_duration": format_duration,
+        "format_memory": format_memory,
         "build_info": build_info,
     }
 
@@ -837,6 +1062,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                 "checker_yaml": checker_yaml,
                 "results": checker_results,
                 "format_duration": format_duration,
+                "format_memory": format_memory,
                 "build_info": build_info,
             }
             

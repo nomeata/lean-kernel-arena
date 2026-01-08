@@ -37,7 +37,9 @@
                 <th>Version</th>
                 <th class="text-center" title="Correctly accepted valid proofs">✅</th>
                 <th class="text-center" title="Correctly rejected invalid proofs">❌</th>
-                <th class="text-right" title="Time to process mathlib test">⏱️</th>
+                <th class="text-right" title="Wall time to process mathlib test">⏱️ Wall</th>
+                <th class="text-right" title="CPU time to process mathlib test">⏱️ CPU</th>
+                <th class="text-right" title="Peak memory usage for mathlib test">🧠 RSS</th>
             </tr>
         </thead>
         <tbody>
@@ -54,6 +56,20 @@
                 <td class="text-right">
                     {% if checker.stats.mathlib_time is not none %}
                         {{ format_duration(checker.stats.mathlib_time) }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {% if checker.stats.mathlib_cpu_time is not none and checker.stats.mathlib_cpu_time > 0 %}
+                        {{ format_duration(checker.stats.mathlib_cpu_time) }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {% if checker.stats.mathlib_max_rss is not none and checker.stats.mathlib_max_rss > 0 %}
+                        {{ format_memory(checker.stats.mathlib_max_rss) }}
                     {% else %}
                         -
                     {% endif %}
