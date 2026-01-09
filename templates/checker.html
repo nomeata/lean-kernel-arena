@@ -119,7 +119,9 @@ section pre, details pre {
             {% for result in results %}
             <tr>
                 <td><a href="#test-{{ result.test }}">{{ result.test }}</a></td>
-                <td>{{ result.expected or '-' }}</td>
+                <td class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}">
+                    {{ result.expected }}
+                </td>
                 <td class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}">
                     {{ result.status }}
                 </td>
