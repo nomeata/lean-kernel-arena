@@ -532,8 +532,8 @@ def create_test(test: dict, output_dir: Path) -> bool:
         lean4export_dir = work_dir.parent / "lean4export"
         if not lean4export_dir.exists():
             print(f"  Cloning lean4export...")
-            clone_cmd = ["git", "clone", "--branch", "json_output",
-                        "https://github.com/ammkrn/lean4export",
+            clone_cmd = ["git", "clone", "--branch", "arena_json_output",
+                        "https://github.com/leanprover/lean4export",
                         str(lean4export_dir)]
             result = run_cmd(clone_cmd)
             if result.returncode != 0:
