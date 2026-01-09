@@ -13,6 +13,9 @@ description: |
   
   Useful for cross-validation against the official kernel and
   testing implementation diversity in the Lean ecosystem.
+
+  The nanoda integration in the arena does not distinguish between a rejected proof and other forms
+  of failure, so they are all repoted as “rejected”.
 url: https://github.com/ammkrn/nanoda_lib/
 ref: json_string
 rev: 2747659518c0d5debe1d05cb02ba9232cafa4897
@@ -29,4 +32,4 @@ build: |
    }
   __END__
 run: |
-  target/release/nanoda_bin config.json < "$IN"
+  target/release/nanoda_bin config.json < "$IN" || exit 1
