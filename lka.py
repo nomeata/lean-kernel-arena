@@ -327,6 +327,35 @@ def run_lean4export(lean4export_dir: Path, module_name: str, export_decls: list 
     return True
 
 
+def setup_lean4export(work_dir_parent: Path) -> Path | None:
+    """Clone and build lean4export in a sibling directory if not already present.
+    
+    Args:
+        work_dir_parent: Parent directory where lean4export should be cloned
+        
+    Returns:
+        Path to lean4export directory, or None on failure
+    """
+    lean4export_dir = work_dir_parent / "lean4export"
+    if not lean4export_dir.exists():
+        print(f"  Cloning lean4export...")
+        clone_cmd = ["git", "clone", "--branch", "arena_json_output",
+                    "https://github.com/leanprover/lean4export",
+                    str(lean4export_dir)]
+        result = run_cmd(clone_cmd)
+        if result.returncode != 0:
+            print(f"  Error cloning lean4export: {result.stderr}")
+            return None
+
+        print(f"  Building lean4export...")
+        result = run_cmd("lake build", cwd=lean4export_dir, shell=True)
+        if result.returncode != 0:
+            print(f"  Error building lean4export: {result.stderr}")
+            return None
+    
+    return lean4export_dir
+
+
 def load_yaml_files(directory: Path, schema_name: str) -> list[dict]:
     """Load all YAML files from a directory with schema validation."""
     items = []
@@ -380,25 +409,29 @@ def find_checker_by_name(name: str) -> dict | None:
 def setup_source_directory(
     config: dict, 
     base_dir: Path, 
-    local_base_path: Path | None = None
+    local_base_path: Path | None = None,
+    lean4export_dir: Path | None = None,
 ) -> Path | None:
     """Set up a source directory for tests or checkers.
     
-    Handles three cases:
+    Handles four cases:
     - url: Clone a git repository
     - dir: Use a local directory
+    - leanfile: Set up a standalone Test module from a Lean file
     - neither: Create an empty directory
     
     Args:
-        config: Test or checker configuration dict with name, url, dir, ref, rev
+        config: Test or checker configuration dict with name, url, dir, ref, rev, leanfile
         base_dir: Base directory where the work/build directory should be created
         local_base_path: Base path for local directories (defaults to project root)
+        lean4export_dir: Path to lean4export directory (if needed for leanfile case)
     
     Returns the working directory path, or None on failure.
     """
     name = config["name"]
     url = config.get("url")
     local_dir = config.get("dir")
+    lean_file_path = config.get("leanfile")
     ref = config.get("ref")
     rev = config.get("rev")
 
@@ -412,20 +445,20 @@ def setup_source_directory(
         shutil.rmtree(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    src_dir = work_dir / "src"
+
     if url:
         # Clone from git repository
         print(f"  Cloning {url}...")
         clone_cmd = ["git", "clone"]
         if ref:
             clone_cmd.extend(["--branch", ref])
-        clone_cmd.extend([url, str(work_dir / "src")])
+        clone_cmd.extend([url, str(src_dir)])
 
         result = run_cmd(clone_cmd)
         if result.returncode != 0:
             print(f"  Error cloning: {result.stderr}")
             return None
-
-        src_dir = work_dir / "src"
 
         # Checkout specific revision if specified
         if rev:
@@ -443,14 +476,44 @@ def setup_source_directory(
             print(f"  Source directory not found: {source_dir}")
             return None
         
-        src_dir = work_dir / "src"
         shutil.copytree(source_dir, src_dir)
         print(f"  Copied {source_dir} to {src_dir}")
         return src_dir
 
+    elif lean_file_path:
+        # Set up a standalone Test module from a Lean file
+        source_file = get_project_root() / lean_file_path
+        if not source_file.exists():
+            print(f"  Source file not found: {source_file}")
+            return None
+        
+        # Create src directory and copy the lean file as Test.lean
+        src_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = src_dir / "Test.lean"
+        shutil.copy(source_file, dest_file)
+        print(f"  Copied {source_file} to {dest_file}")
+        
+        # Copy lean-toolchain from lean4export to work directory
+        toolchain_file = lean4export_dir / "lean-toolchain"
+        dest_toolchain = work_dir / "lean-toolchain"
+        if toolchain_file.exists():
+            shutil.copy(toolchain_file, dest_toolchain)
+            print(f"  Copied lean-toolchain to work directory")
+
+        # Create a trivial lakefile in the work directory
+        lakefile_content = '''name = "test"
+
+[[lean_lib]]
+name = "Test"'''
+        lakefile_path = src_dir / "lakefile.toml"
+        with open(lakefile_path, "w") as f:
+            f.write(lakefile_content)
+        print(f"  Created trivial lakefile")
+        
+        return src_dir
+
     else:
         # Empty directory
-        src_dir = work_dir / "src"
         src_dir.mkdir(parents=True, exist_ok=True)
         return src_dir
 
@@ -458,19 +521,6 @@ def setup_source_directory(
 # =============================================================================
 # build-test command
 # =============================================================================
-
-
-def setup_work_dir(test: dict, output_dir: Path) -> Path | None:
-    """Set up the working directory for a test.
-    
-    Handles three cases:
-    - url: Clone a git repository
-    - dir: Use a local directory
-    - neither: Create an empty directory
-    
-    Returns the working directory path, or None on failure.
-    """
-    return setup_source_directory(test, output_dir / "work")
 
 
 def create_test(test: dict, output_dir: Path) -> bool:
@@ -512,8 +562,16 @@ def create_test(test: dict, output_dir: Path) -> bool:
         print(f"  Copied {source_file} to {output_file}")
         return True
 
+    # These test types require lean4export
+    lean4export_dir = None
+    if module or lean_file_path:
+        # TODO: Check out a tag based on the lean-toolchain of the test repository
+        lean4export_dir = setup_lean4export(output_dir / "work")
+        if lean4export_dir is None:
+            return False
+
     # Set up work directory (url, dir, or empty)
-    work_dir = setup_work_dir(test, output_dir)
+    work_dir = setup_source_directory(test, output_dir / "work", lean4export_dir=lean4export_dir)
     if work_dir is None:
         return False
 
@@ -526,29 +584,20 @@ def create_test(test: dict, output_dir: Path) -> bool:
             return False
 
     # Execute based on test type
-    if module:
-        # Set up lean4export in a sibling directory
-        # TODO: Check out a tag based on the lean-toolchain of the test repository
-        lean4export_dir = work_dir.parent / "lean4export"
-        if not lean4export_dir.exists():
-            print(f"  Cloning lean4export...")
-            clone_cmd = ["git", "clone", "--branch", "arena_json_output",
-                        "https://github.com/leanprover/lean4export",
-                        str(lean4export_dir)]
-            result = run_cmd(clone_cmd)
-            if result.returncode != 0:
-                print(f"  Error cloning lean4export: {result.stderr}")
-                return False
-
-            print(f"  Building lean4export...")
-            result = run_cmd("lake build", cwd=lean4export_dir, shell=True)
-            if result.returncode != 0:
-                print(f"  Error building lean4export: {result.stderr}")
-                return False
-
-        # Build the module in the repo
-        print(f"  Building module {module}...")
-        result = run_cmd(f"lake build {module}", cwd=work_dir, shell=True)
+    if module or lean_file_path:
+        # Both module and leanfile variants use lean4export workflow
+        # leanfile is treated like module with hardcoded module name "Test"
+        build_dir = work_dir
+        
+        # Determine module name
+        if lean_file_path:
+            module_name = "Test"
+        else:
+            module_name = module
+        
+        # Build the module
+        print(f"  Building module {module_name}...")
+        result = run_cmd(f"lake build {module_name}", cwd=build_dir, shell=True)
         if result.returncode != 0:
             print(f"  Build failed: {result.stderr}")
             return False
@@ -557,73 +606,8 @@ def create_test(test: dict, output_dir: Path) -> bool:
         if export_decls and not isinstance(export_decls, list):
             print(f"  Error: export-decls must be a list of strings")
             return False
-        print(f"  Exporting module {module}...")
-        if not run_lean4export(lean4export_dir, module, export_decls, cwd=work_dir, out_file=tmp_file):
-            return False
-
-    elif lean_file_path:
-        # Handle leanfile variant: copy lean file to work directory and compile
-        
-        # Copy the lean file to the work directory with a hardcoded name "Test.lean"
-        source_file = get_project_root() / lean_file_path
-        if not source_file.exists():
-            print(f"  Source file not found: {source_file}")
-            return False
-        
-        # For lakefile approach, copy to work directory root, not src subdirectory
-        actual_work_dir = work_dir.parent
-        dest_file = actual_work_dir / "Test.lean"
-        shutil.copy(source_file, dest_file)
-        print(f"  Copied {source_file} to {dest_file}")
-        
-        # Set up lean4export in a sibling directory (same as module variant)
-        lean4export_dir = work_dir.parent / "lean4export"
-        if not lean4export_dir.exists():
-            print(f"  Cloning lean4export...")
-            clone_cmd = ["git", "clone", "--branch", "json_output",
-                        "https://github.com/ammkrn/lean4export",
-                        str(lean4export_dir)]
-            result = run_cmd(clone_cmd)
-            if result.returncode != 0:
-                print(f"  Error cloning lean4export: {result.stderr}")
-                return False
-
-            print(f"  Building lean4export...")
-            result = run_cmd("lake build", cwd=lean4export_dir, shell=True)
-            if result.returncode != 0:
-                print(f"  Error building lean4export: {result.stderr}")
-                return False
-
-        # Copy lean-toolchain from lean4export to work directory
-        toolchain_file = lean4export_dir / "lean-toolchain"
-        dest_toolchain = actual_work_dir / "lean-toolchain"
-        if toolchain_file.exists():
-            shutil.copy(toolchain_file, dest_toolchain)
-            print(f"  Copied lean-toolchain to work directory")
-
-        # Create a trivial lakefile in the work directory
-        lakefile_content = '''name = "test"
-
-[[lean_lib]]
-name = "Test"'''
-        lakefile_path = actual_work_dir / "lakefile.toml"
-        with open(lakefile_path, "w") as f:
-            f.write(lakefile_content)
-        print(f"  Created trivial lakefile")
-
-        # Build the Test module using lake (similar to module variant)
-        print(f"  Building Test module with lake...")
-        result = run_cmd("lake build Test", cwd=actual_work_dir, shell=True)
-        if result.returncode != 0:
-            print(f"  Build failed: {result.stderr}")
-            return False
-
-        # Export using lean4export with lake env (same as module variant)
-        if export_decls and not isinstance(export_decls, list):
-            print(f"  Error: export-decls must be a list of strings")
-            return False
-        print(f"  Exporting Test module...")
-        if not run_lean4export(lean4export_dir, "Test", export_decls, cwd=actual_work_dir, out_file=tmp_file):
+        print(f"  Exporting module {module_name}...")
+        if not run_lean4export(lean4export_dir, module_name, export_decls, cwd=build_dir, out_file=tmp_file):
             return False
 
     elif run_cmd_str:
