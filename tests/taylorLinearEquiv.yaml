@@ -1,0 +1,13 @@
+description: |
+  This test contains a proof of `Polynomial.taylorLinearEquiv_symm` from mathlib4, before 
+  the fixes from PR [https://github.com/leanprover-community/mathlib4/pull/33794](#33794).
+
+  This proof makes some kernels peform very poorly.
+url: https://github.com/leanprover-community/mathlib4
+ref: v4.27.0-rc1
+rev: 32d24245c7a12ded17325299fd41d412022cd3fe
+pre-build: lake exe cache get
+module: Mathlib
+outcome: accept
+export-decls: ["Polynomial.taylorLinearEquiv_symm"]
+
