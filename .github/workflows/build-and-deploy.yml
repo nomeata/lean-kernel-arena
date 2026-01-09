@@ -28,6 +28,29 @@ jobs:
         run:  true
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
+      - name: Check perf support
+        run: |
+          echo "=== System info ==="
+          uname -a || true
+          echo "=== perf binary ==="
+          if command -v perf >/dev/null 2>&1; then
+            perf --version || true
+          else
+            echo "perf not installed"
+          fi
+          echo "=== kernel perf settings ==="
+          for f in /proc/sys/kernel/perf_event_paranoid /proc/sys/kernel/kptr_restrict; do
+            if [ -f "$f" ]; then
+              printf "%s: %s\n" "$f" "$(cat $f)"
+            else
+              printf "%s: (missing)\n" "$f"
+            fi
+          done
+          echo "=== try perf stat (may require privileges) ==="
+          perf stat -e cycles -a -- true 2>&1 || echo "perf stat failed or not permitted"
+        shell: 'nix develop -c bash -euxo pipefail {0}'
+        continue-on-error: true
+      
       - name: Generate tests
         run: ./lka.py build-test
         shell: 'nix develop -c bash -euxo pipefail {0}'
