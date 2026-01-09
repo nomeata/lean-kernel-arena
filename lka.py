@@ -5,7 +5,6 @@ import argparse
 import datetime
 import json
 import os
-import resource
 import shutil
 import subprocess
 import sys
@@ -22,11 +21,7 @@ import shlex
 # Global verbose flag
 VERBOSE = False
 
-# Perf measurement units - strict validation, no heuristics
-PERF_UNITS = {
-    "msec": 1e-3,
-    "ns": 1e-9,
-}
+# Timing/measurement utilities
 
 
 def get_project_root() -> Path:
@@ -105,122 +100,96 @@ def measure_perf_with_fallback(
     shell: bool = False,
     capture_output: bool = True,
 ) -> tuple[subprocess.CompletedProcess, dict]:
-    """Run a command and measure performance metrics, with fallback if perf is unavailable.
+    """Run a command and measure performance metrics, with fallback if GNU time is unavailable.
     
     Returns:
         Tuple of (subprocess result, metrics dict)
         
     Metrics dict contains:
     - wall_time: Wall clock time in seconds
-    - cpu_time: CPU time in seconds (if available via perf)
+    - cpu_time: CPU time in seconds (measured via GNU time or derived from rusage)
     - max_rss: Maximum RSS in bytes
     """
     # Record wall time manually as fallback
     start_wall_time = time.time()
     
-    # Try to use perf if available
+    # Try to use GNU `time` if available for structured measurements
     metrics = {}
-    use_perf = False
-    
-    # Check if perf is available
+    use_gnu_time = False
     try:
-        perf_check = subprocess.run(
-            ["perf", "--version"], 
-            capture_output=True, 
-            timeout=2
-        )
-        if perf_check.returncode == 0:
-            use_perf = True
+        time_check = subprocess.run(["time", "--version"], capture_output=True, timeout=2)
+        if time_check.returncode == 0:
+            use_gnu_time = True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        use_perf = False
-    
-    if use_perf:
-        # Use perf for more accurate measurements
+        use_gnu_time = False
+
+    if use_gnu_time:
+        # Use GNU time to collect real/user/sys and max RSS
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp:
             tmp_path = tmp.name
-        
+
+        # Format string that GNU time understands
+        fmt = "real_seconds=%e\nuser_seconds=%U\nsys_seconds=%S\nmax_rss_kb=%M"
+
         try:
             if isinstance(cmd, list):
-                perf_cmd = [
-                    "perf", "stat", "-j", "-o", tmp_path,
-                    "-e", "duration_time",  # wall-clock time
-                    "-e", "task-clock",     # cpu time
-                    "--", *cmd
-                ]
+                time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--", *cmd]
             else:
-                perf_cmd = [
-                    "perf", "stat", "-j", "-o", tmp_path,
-                    "-e", "duration_time",
-                    "-e", "task-clock",
-                    "--"
-                ]
+                # When shell=True we need to run via sh -c
                 if shell:
-                    perf_cmd.extend(["sh", "-c", cmd])
+                    time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--", "sh", "-c", cmd]
                 else:
-                    perf_cmd.extend(cmd.split())
-            
-            # Set up environment
-            perf_env = (env or os.environ).copy()
-            perf_env["LC_ALL"] = "C"  # Ensure perf outputs valid JSON
-            
-            # Run with perf
+                    time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--"] + cmd.split()
+
             result = subprocess.run(
-                perf_cmd,
+                time_cmd,
                 cwd=cwd,
-                env=perf_env,
-                shell=False,  # perf handles shell execution
+                env=(env or os.environ).copy(),
+                shell=False,
                 capture_output=capture_output,
                 text=True,
             )
-            
-            # Parse perf output with strict unit validation
-            perf_metrics = {}
+
+            # Read metrics from tmp file
+            time_metrics = {}
             try:
                 with open(tmp_path, 'r') as f:
                     for line in f:
                         line = line.strip()
-                        if line:
-                            try:
-                                data = json.loads(line)
-                                if "event" in data and "counter-value" in data:
-                                    event = data["event"]
-                                    value = float(data["counter-value"])
-                                    unit = data.get("unit", "")
-                                    
-                                    # Strict unit validation
-                                    if unit in PERF_UNITS:
-                                        value *= PERF_UNITS[unit]
-                                        perf_metrics[event] = value
-                                    elif unit == "":
-                                        # Empty unit - for time events, default is nanoseconds
-                                        if event in ["duration_time", "task-clock"]:
-                                            value *= 1e-9  # Convert nanoseconds to seconds
-                                            perf_metrics[event] = value
-                                        else:
-                                            # For other events with empty unit, assume base unit
-                                            perf_metrics[event] = value
-                                    else:
-                                        # Unknown unit - log if verbose but don't fail
-                                        if VERBOSE:
-                                            print(f"    Unknown perf unit '{unit}' for event '{event}', skipping")
-                            except (json.JSONDecodeError, ValueError, KeyError):
-                                continue
+                        if not line:
+                            continue
+                        if '=' in line:
+                            k, v = line.split('=', 1)
+                            time_metrics[k.strip()] = v.strip()
             except Exception:
-                # If perf parsing fails, we'll fall back to manual timing
                 pass
             finally:
-                # Clean up temp file
                 try:
                     os.unlink(tmp_path)
-                except:
+                except Exception:
                     pass
-            
-            # Extract metrics with fallback to manual timing
-            metrics["wall_time"] = perf_metrics.get("duration_time", time.time() - start_wall_time)
-            metrics["cpu_time"] = perf_metrics.get("task-clock", 0.0)
-        
+
+            # Fill metrics with sensible fallbacks
+            try:
+                metrics["wall_time"] = float(time_metrics.get("real_seconds", time.time() - start_wall_time))
+            except Exception:
+                metrics["wall_time"] = time.time() - start_wall_time
+
+            try:
+                user_s = float(time_metrics.get("user_seconds", "0"))
+                sys_s = float(time_metrics.get("sys_seconds", "0"))
+                metrics["cpu_time"] = user_s + sys_s
+            except Exception:
+                metrics["cpu_time"] = 0.0
+
+            try:
+                max_rss_kb = int(time_metrics.get("max_rss_kb", "0"))
+                metrics["max_rss"] = max_rss_kb * 1024
+            except Exception:
+                metrics["max_rss"] = 0.0
+
         except Exception:
-            # If perf fails completely, fall back to manual measurement
+            # If GNU time fails for any reason, run normally and fall back
             result = subprocess.run(
                 cmd,
                 cwd=cwd,
@@ -231,6 +200,7 @@ def measure_perf_with_fallback(
             )
             metrics["wall_time"] = time.time() - start_wall_time
             metrics["cpu_time"] = 0.0
+            metrics["max_rss"] = 0.0
     else:
         # Fallback: run normally and measure wall time
         result = subprocess.run(
@@ -242,17 +212,7 @@ def measure_perf_with_fallback(
             text=True,
         )
         metrics["wall_time"] = time.time() - start_wall_time
-        metrics["cpu_time"] = 0.0  # Not available without perf
-    
-    # Get rusage for memory info (this captures child process usage)
-    try:
-        final_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
-        # ru_maxrss is in KB on Linux, bytes on macOS
-        maxrss = final_rusage.ru_maxrss
-        if sys.platform == "linux":
-            maxrss *= 1024  # Convert KB to bytes on Linux
-        metrics["max_rss"] = maxrss
-    except Exception:
+        metrics["cpu_time"] = 0.0  # Not measured here (no GNU time available)
         metrics["max_rss"] = 0.0
     
     return result, metrics
