@@ -61,14 +61,14 @@
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% if checker.stats.mathlib_cpu_time is not none and checker.stats.mathlib_cpu_time > 0 %}
+                    {% if checker.stats.mathlib_cpu_time is not none %}
                         {{ format_duration(checker.stats.mathlib_cpu_time) }}
                     {% else %}
                         -
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% if checker.stats.mathlib_max_rss is not none and checker.stats.mathlib_max_rss > 0 %}
+                    {% if checker.stats.mathlib_max_rss is not none %}
                         {{ format_memory(checker.stats.mathlib_max_rss) }}
                     {% else %}
                         -

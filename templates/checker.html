@@ -125,14 +125,14 @@ section pre, details pre {
                 </td>
                 <td class="text-right">{{ format_duration(result.wall_time or 0) }}</td>
                 <td class="text-right">
-                    {% if result.cpu_time and result.cpu_time > 0 %}
+                    {% if result.cpu_time is not none %}
                         {{ format_duration(result.cpu_time) }}
                     {% else %}
                         -
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% if result.max_rss and result.max_rss > 0 %}
+                    {% if result.max_rss is not none %}
                         {{ format_memory(result.max_rss) }}
                     {% else %}
                         -
@@ -176,10 +176,10 @@ section pre, details pre {
         <span class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.status }}</span>
         · exit code {{ result.exit_code }}
         · wall: {{ format_duration(result.wall_time or 0) }}
-        {% if result.cpu_time and result.cpu_time > 0 %}
+        {% if result.cpu_time is not none %}
         · cpu: {{ format_duration(result.cpu_time) }}
         {% endif %}
-        {% if result.max_rss and result.max_rss > 0 %}
+        {% if result.max_rss is not none %}
         · rss: {{ format_memory(result.max_rss) }}
         {% endif %}
     </p>

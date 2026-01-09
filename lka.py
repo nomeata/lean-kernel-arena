@@ -268,10 +268,8 @@ def run_cmd(
         if VERBOSE:
             status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
             metrics_str = f"wall: {format_duration(result.wall_time)}"
-            if result.cpu_time > 0:
-                metrics_str += f", cpu: {format_duration(result.cpu_time)}"
-            if result.max_rss > 0:
-                metrics_str += f", rss: {format_memory(result.max_rss)}"
+            metrics_str += f", cpu: {format_duration(result.cpu_time)}"
+            metrics_str += f", rss: {format_memory(result.max_rss)}"
             print(f"      -> {status} ({metrics_str})")
     else:
         # Use simple timing
