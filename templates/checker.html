@@ -119,11 +119,11 @@ section pre, details pre {
             {% for result in results %}
             <tr>
                 <td><a href="#test-{{ result.test }}">{{ result.test }}</a></td>
-                <td class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}">
-                    {{ result.expected }}
+                <td>
+                    {% if result.expected == 'accept' %}✅ accept{% elif result.expected == 'reject' %}❌ reject{% else %}⚠️ {{ result.expected }}{% endif %}
                 </td>
-                <td class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}">
-                    {{ result.status }}
+                <td class="{% if (result.expected == 'accept' and result.status == 'accepted') or (result.expected == 'reject' and result.status == 'rejected') %}bg-success{% elif (result.expected == 'accept' and result.status != 'accepted' and result.status != 'declined') or (result.expected == 'reject' and result.status != 'rejected' and result.status != 'declined') %}bg-error{% else %}bg-warning{% endif %}">
+                    {% if result.status == 'accepted' %}✅ accepted{% elif result.status == 'rejected' %}❌ rejected{% elif result.status == 'declined' %}⚠️ declined{% else %}💥 {{ result.status }}{% endif %}
                 </td>
                 <td class="text-right">{{ format_duration(result.wall_time or 0) }}</td>
                 <td class="text-right">
@@ -154,7 +154,8 @@ section pre, details pre {
     <h3 id="test-{{ result.test }}">Test "{{ result.test }}"</h3>
     
     <p>
-        <strong>Expected:</strong> <span class="{% if result.expected == 'accept' %}bg-success{% elif result.expected == 'reject' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.expected }}</span>
+        <strong>Expected:</strong> 
+        {% if result.expected == 'accept' %}✅ accept{% elif result.expected == 'reject' %}❌ reject{% else %}⚠️ {{ result.expected }}{% endif %}
         {% if result.test_stats %}
         · <strong>Size:</strong> {{ result.test_stats.size_str }} ({{ result.test_stats.lines_str }} lines)
         {% endif %}
@@ -175,7 +176,9 @@ section pre, details pre {
     
     <p>
       <b>Test result:</b>
-        <span class="{% if result.status == 'accepted' %}bg-success{% elif result.status == 'rejected' %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">{{ result.status }}</span>
+        <span class="{% if (result.expected == 'accept' and result.status == 'accepted') or (result.expected == 'reject' and result.status == 'rejected') %}bg-success{% elif (result.expected == 'accept' and result.status != 'accepted' and result.status != 'declined') or (result.expected == 'reject' and result.status != 'rejected' and result.status != 'declined') %}bg-error{% else %}bg-warning{% endif %}" style="padding: 0.2em 0.5em; border-radius: 3px;">
+            {% if result.status == 'accepted' %}✅ accepted{% elif result.status == 'rejected' %}❌ rejected{% elif result.status == 'declined' %}⚠️ declined{% else %}💥 {{ result.status }}{% endif %}
+        </span>
         · exit code {{ result.exit_code }}
         · wall: {{ format_duration(result.wall_time or 0) }}
         {% if result.cpu_time is not none %}
