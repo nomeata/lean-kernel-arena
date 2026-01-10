@@ -28,7 +28,7 @@ The framework consists of:
 
 ### Development Environment
 
-Using Nix, use `nix develop` to provides the necessary dependencies in an isolated shell. Thes are
+Using Nix, use `nix develop` obtain a shell that provides the necessary dependencies, which are:
 
 * `python3` with dependencies (`jinja2`, `pyyaml`, `jsonschema`, `markdown`)
 * GNU `time`
@@ -75,7 +75,7 @@ ref: main        # git branch or tag
 rev: deadbeeef   # git revision
 module: MyModule # module to export
 outcome: accept  # or 'reject' for tests that should fail
-export-decls:   # optional: export only specific declarations and their dependencies, for smaller tests
+export-decls:   # optional: export only specific declarations and their dependencies
   - myTheorem
 
 ```
@@ -89,7 +89,7 @@ description: |
   Test for a specific corner case
 leanfile: tests/my-test.lean
 outcome: accept
-export-decls:  # optional: export only specific declarations
+export-decls:   # optional: export only specific declarations and their dependencies
   - myTheorem
 ```
 
@@ -108,6 +108,10 @@ See `schemas/test.json` for the complete specification.
 
 ### Contributing Checkers
 
+We welcome more alternative kernel implementations, including incomplete ones, especially if they explore a particular corner of the design space (e.g. trimmed for performance, simplicity, verifiability, using a particular term representation, type checking or reduction strategy or a different host langauge).
+
+The book [Type Checking in Lean4](https://ammkrn.github.io/type_checking_in_lean4/) is a good reference on writing a Lean kernel.
+
 To add a new checker implementation:
 
 1. Create a YAML file in the `checkers/` directory
@@ -121,12 +125,12 @@ description: |
 version: "1.0.0"
 url: https://github.com/user/my-checker
 ref: main        # git branch or tag
-rev: deadbeeef   # git revision
+rev: deadbeef    # git revision
 build: cargo build --release
 run: ./target/release/my-checker < $IN
 ```
 
-The `run` command receives the test file path via the `$IN` environment variable.
+The `run` command receives the test file path via the `$IN` environment variable, in the NDJSON-based format created by [`lean4export`](https://github.com/leanprover/lean4export). (At the time of writing, the [format is still in flux](https://github.com/leanprover/lean4export/issues/3).)
 
 **Exit codes:**
 
@@ -137,6 +141,8 @@ The `run` command receives the test file path via the `$IN` environment variable
   A declined test is simply ignored for the purpose of completeness and correctness. For example, a checker that does not support `native_decide` can decline to process a proof involving the `Lean.trustCompiler axiom`. This is different than rejecting the proof (it may be valid after all) or erroring out (which indicates a bug in the checker).
   
 - anything else: an error in the checker
+
+The arena does not automatically update the checkers; please submit new releases manually.
 
 See `schemas/checker.json` for the complete specification.
 
