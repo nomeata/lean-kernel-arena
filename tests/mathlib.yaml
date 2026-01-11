@@ -5,10 +5,12 @@ description: |
   from Mathlib, representing the largest and most comprehensive test case
   in the Lean kernel arena.
 
-  This test is based on <https://github.com/leanprover-community/mathlib4/pull/33794> to include the performance fix therein.
-url: https://github.com/Kha/mathlib4
-ref: push-novvxxkskxoo
-rev: c5079a8647a103a7b61b345da5549c954094db20
+  This test ist based on a commit that include
+  <https://github.com/leanprover-community/mathlib4/pull/33794> to include the performance fix
+  therein.
+url: https://github.com/leanprover-community/mathlib4
+ref: master
+rev: 7acaa1e4b353e8a5f9044f9bb0b68460079533a6
 pre-build: lake exe cache get
 module: Mathlib
 outcome: accept
