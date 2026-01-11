@@ -30,6 +30,7 @@
 
 <section>
     {% if checkers %}
+    <div style="overflow-x:auto">
     <table class="striped">
         <thead>
             <tr>
@@ -82,6 +83,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p class="text-grey">No checkers defined.</p>
     {% endif %}
