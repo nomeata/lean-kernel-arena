@@ -1220,6 +1220,7 @@ def generate_source_links(config: dict, config_type: str, git_revision: str | No
     # Generate source URL
     url = config.get("url")
     local_dir = config.get("dir")
+    leanfile = config.get("leanfile")
     rev = config.get("rev")
     
     if url:
@@ -1241,6 +1242,9 @@ def generate_source_links(config: dict, config_type: str, git_revision: str | No
         else:
             source_path = local_dir
         links["source_url"] = f"{base_github_url}/tree/{git_revision}/{source_path}"
+    elif leanfile:
+        # Lean file in this repository
+        links["source_url"] = f"{base_github_url}/blob/{git_revision}/{leanfile}"
     
     return links
 
