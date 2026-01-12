@@ -1,0 +1,7 @@
+description: |
+  Dependent type: `f : Prop := ∀ (p: Prop), p`
+  
+  Tests dependent product types (forall) with bound variables.
+leanfile: tests/tut03-forall.lean
+export-decls: ["f"]
+outcome: accept

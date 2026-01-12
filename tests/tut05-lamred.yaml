@@ -1,0 +1,8 @@
+description: |
+  Lambda reduction: Tests function application and beta reduction.
+  
+  Defines `f : Type → Type → Type := fun x y => x` and then `thm : f Prop (Prop → Prop)`
+  which requires the checker to reduce `f Prop (Prop → Prop)` to `Prop`.
+leanfile: tests/tut05-lamred.lean
+export-decls: ["f", "thm"]
+outcome: accept
