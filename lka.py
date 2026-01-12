@@ -1249,6 +1249,52 @@ def generate_source_links(config: dict, config_type: str, git_revision: str | No
     return links
 
 
+def create_test_tarball(tests: list, output_dir: Path) -> dict:
+    """Create a tarball containing test files, organized by expected outcome.
+    
+    Returns dict with tarball_size (in bytes), good_count, and bad_count.
+    """
+    import tarfile
+    import os
+    
+    tarball_path = output_dir / "lean-arena-tests.tar.gz"
+    build_tests_dir = get_project_root() / "_build" / "tests"
+    
+    good_count = 0
+    bad_count = 0
+    
+    with tarfile.open(tarball_path, "w:gz") as tar:
+        for test in tests:
+            # Skip large tests
+            if test.get("large", False):
+                continue
+                
+            test_file = build_tests_dir / f"{test['name']}.ndjson"
+            if not test_file.exists():
+                continue
+                
+            outcome = test.get("outcome", "unknown")
+            if outcome == "accept":
+                subdir = "good"
+                good_count += 1
+            else:
+                subdir = "bad"
+                bad_count += 1
+            
+            # Add file to tarball with appropriate subdirectory
+            arcname = f"{subdir}/{test['name']}.ndjson"
+            tar.add(test_file, arcname=arcname)
+    
+    # Get tarball size
+    tarball_size = tarball_path.stat().st_size if tarball_path.exists() else 0
+    
+    return {
+        "tarball_size": tarball_size,
+        "good_count": good_count,
+        "bad_count": bad_count
+    }
+
+
 def cmd_build_site(args: argparse.Namespace) -> int:
     """Handle the build-site command."""
     output_dir = Path(args.outdir)
@@ -1295,6 +1341,9 @@ def cmd_build_site(args: argparse.Namespace) -> int:
     # Get build metadata
     build_info = get_build_metadata()
 
+    # Create test tarball
+    tarball_info = create_test_tarball(tests, output_dir)
+
     # Build context data
     data = {
         "tests": tests,
@@ -1302,6 +1351,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
         "format_duration": format_duration,
         "format_memory": format_memory,
         "build_info": build_info,
+        "tarball_info": tarball_info,
     }
 
     # Render index.html

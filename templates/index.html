@@ -111,6 +111,11 @@
     </p>
 
     <p>
+        A tarball of the test suite (excluding large tests) is available for download: <a href="lean-arena-tests.tar.gz"><tt>lean-arena-tests.tar.gz</tt></a> ({{ tarball_info.good_count }} good tests, {{ tarball_info.bad_count }} bad tests, {{ format_memory(tarball_info.tarball_size) }}). 
+        The tarball contains subdirectories <tt>good/</tt> and <tt>bad/</tt> based on expected results, making it easy to test your own checker implementation.
+    </p>
+
+    <p>
         We are interested in extending our test suite, in particular tests that should be rejected are a useful help for authors of new kernel checkers.
     </p>
 
