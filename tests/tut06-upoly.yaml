@@ -3,5 +3,5 @@ description: |
   
   Tests universe polymorphism with level parameters and generic sorts.
 leanfile: tests/tutorial.lean
-export-decls: ["tut06f", "tut06thm"]
+export-decls: ["tut06"]
 outcome: accept

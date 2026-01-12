@@ -12,3 +12,4 @@ description: |
   initial checker validation and debugging.
 leanfile: tests/init_module.lean
 outcome: accept
+large: true
