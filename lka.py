@@ -944,6 +944,18 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
         checkers = [checker]
     else:
         checkers = load_checkers()
+        # Filter out checkers that weren't built (no build directory exists)
+        built_checkers = []
+        skipped_checker_names = []
+        for checker in checkers:
+            checker_dir = build_dir / checker["name"]
+            if checker_dir.exists():
+                built_checkers.append(checker)
+            else:
+                skipped_checker_names.append(checker["name"])
+        checkers = built_checkers
+        if skipped_checker_names:
+            print(f"Skipping {len(skipped_checker_names)} checker(s) that weren't built: {', '.join(skipped_checker_names)}")
 
     # Determine which tests to run
     if args.test:
@@ -954,13 +966,25 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
         tests = [test]
     else:
         tests = load_tests()
+        # Filter out tests that weren't built (no .ndjson file exists)
+        built_tests = []
+        skipped_test_names = []
+        for test in tests:
+            test_file = tests_dir / f"{test['name']}.ndjson"
+            if test_file.exists():
+                built_tests.append(test)
+            else:
+                skipped_test_names.append(test["name"])
+        tests = built_tests
+        if skipped_test_names:
+            print(f"Skipping {len(skipped_test_names)} test(s) that weren't built: {', '.join(skipped_test_names)}")
 
     if not checkers:
-        print("No checkers found.")
+        print("No built checkers found.")
         return 0
 
     if not tests:
-        print("No tests found.")
+        print("No built tests found.")
         return 0
 
     results = []
