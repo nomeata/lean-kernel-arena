@@ -1,5 +1,4 @@
-description: |
-  Lambda reduction: Tests function application and beta reduction.
+description: Tests function application and beta reduction.
 leanfile: tests/tutorial.lean
 export-decls: ["tut05"]
 outcome: accept

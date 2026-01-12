@@ -1,7 +1,4 @@
-description: |
-  Universe polymorphism: Like tut05-lamred but using `Sort u` instead of `Type`.
-  
-  Tests universe polymorphism with level parameters and generic sorts.
+description: Tests universe polymorphism with level parameters and generic sorts.
 leanfile: tests/tutorial.lean
 export-decls: ["tut06"]
 outcome: accept

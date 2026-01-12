@@ -1,5 +1,4 @@
-description: |
-  Tests the impredicative maximum (imax) universe level operation in dependent types.
+description: Tests the impredicative maximum (imax) universe level operation in dependent types.
 leanfile: tests/tutorial.lean
 export-decls: ["tut07a", "tut07b"]
 outcome: accept

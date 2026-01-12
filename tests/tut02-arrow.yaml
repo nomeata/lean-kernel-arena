@@ -1,7 +1,4 @@
-description: |
-  Arrow type: `tut02 : Type := Prop → Prop`
-  
-  Tests function type construction using forall without binding variables.
+description: Tests function type construction using arrow types.
 leanfile: tests/tutorial.lean
 export-decls: ["tut02"]
 outcome: accept

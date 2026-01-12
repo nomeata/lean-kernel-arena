@@ -1,7 +1,4 @@
-description: |
-  Lambda abstraction: `tut04 : Type → Type → Type := fun x y => x`
-  
-  Tests lambda expressions and function definitions with multiple parameters.
+description: Tests lambda expressions and function definitions with multiple parameters.
 leanfile: tests/tutorial.lean
 export-decls: ["tut04"]
 outcome: accept
