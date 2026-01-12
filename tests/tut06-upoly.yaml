@@ -2,6 +2,6 @@ description: |
   Universe polymorphism: Like tut05-lamred but using `Sort u` instead of `Type`.
   
   Tests universe polymorphism with level parameters and generic sorts.
-leanfile: tests/tut06-upoly.lean
-export-decls: ["f", "thm"]
+leanfile: tests/tutorial.lean
+export-decls: ["tut06f", "tut06thm"]
 outcome: accept

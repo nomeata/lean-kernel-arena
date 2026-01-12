@@ -1,7 +1,7 @@
 description: |
-  Basic definition: `f : Type := Prop`
+  Basic definition: `tut01 : Type := Prop`
   
   Tests the simplest form of definition declaration.
-leanfile: tests/tut01-def.lean
-export-decls: ["f"]
+leanfile: tests/tutorial.lean
+export-decls: ["tut01"]
 outcome: accept

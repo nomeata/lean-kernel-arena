@@ -2,6 +2,6 @@ description: |
   Impredicative maximum: `f : Prop → Type` with `f (p : Prop) : Type := Type → p`
   
   Tests the impredicative maximum (imax) universe level operation in dependent types.
-leanfile: tests/tut07-imax.lean
-export-decls: ["f"]
+leanfile: tests/tutorial.lean
+export-decls: ["tut07f"]
 outcome: accept

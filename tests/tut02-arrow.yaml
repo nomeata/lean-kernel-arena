@@ -1,7 +1,7 @@
 description: |
-  Arrow type: `f : Type := Prop → Prop`
+  Arrow type: `tut02 : Type := Prop → Prop`
   
   Tests function type construction using forall without binding variables.
-leanfile: tests/tut02-arrow.lean
-export-decls: ["f"]
+leanfile: tests/tutorial.lean
+export-decls: ["tut02"]
 outcome: accept
