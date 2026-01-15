@@ -1,0 +1,10 @@
+version: "-"
+description: |
+  A small, naive and incomplete implementation of a Lean kernel from scratch.
+  
+  This is mostly an exercise to improve the test coverage on the arena. 
+url: https://github.com/nomeata/lean-mini-kernel
+ref: master
+rev: cdcb36b
+build: lake build
+run: .lake/build/bin/mini-kernel "$IN"
