@@ -1,0 +1,4 @@
+description: Tests for duplicate level parameter checking
+leanfile: tests/tutorial.lean
+export-decls: ["tut06_bad01"]
+outcome: reject

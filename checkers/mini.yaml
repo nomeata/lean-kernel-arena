@@ -5,6 +5,6 @@ description: |
   This is mostly an exercise to improve the test coverage on the arena. 
 url: https://github.com/nomeata/lean-mini-kernel
 ref: master
-rev: cdcb36b
+rev: 81df239
 build: lake build
 run: .lake/build/bin/mini-kernel "$IN"

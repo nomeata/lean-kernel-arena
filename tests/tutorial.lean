@@ -44,12 +44,20 @@ def tut04 : Type → Type → Type := fun x y => x
 -- tut05: Lambda reduction (requires two declarations)
 def tut05 : tut04 Prop (Prop → Prop) := ∀ p : Prop, p
 
-#print tut05
-
-
 -- tut06: Universe polymorphism
 def tut06f.{u} : Sort u → Sort u → Sort u := fun α β => α
 def tut06 : tut06f Prop (Prop → Prop) := ∀ p : Prop, p
+
+set_option debug.skipKernelTC true in
+open Lean Meta in
+run_meta addDecl <| .defnDecl {
+  name := `tut06_bad01
+  levelParams := [`u, `u]
+  type := .sort 1
+  value := .sort 0
+  hints := .opaque
+  safety := .safe
+}
 
 -- tut07: Function from Prop to Type (tests imax universe levels)
 def tut07a (p : Prop) : Prop := Type → p
