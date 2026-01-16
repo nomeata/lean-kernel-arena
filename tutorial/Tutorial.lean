@@ -22,7 +22,20 @@ good_def simpleLambda : Type → Type → Type := fun x y => x
 /-- Lambda reduction (requires two declarations) -/
 good_def betaReduction : simpleLambda Prop (Prop → Prop) := ∀ p : Prop, p
 
+/-- The type of a declaration has to be a type, not some other expression -/
+bad_def nonTypeType : simpleLambda := unchecked Prop
+
+/-- Some level computation -/
+good_def levelComp1 : Type 0 := Sort (imax 1 0)
+
+/-- Some level computation -/
+good_def levelComp2 : Type 1 := Sort (max 1 0)
+
+/-- Some level computation -/
+good_def levelComp3 : Type 2 := Sort (imax 2 1)
+
 def levelParamF.{u} : Sort u → Sort u → Sort u := fun α β => α
+
 /-- Level parameters -/
 good_def levelParams : levelParamF Prop (Prop → Prop) := ∀ p : Prop, p
 
@@ -36,8 +49,14 @@ bad_decl .defnDecl {
   safety := .safe
 }
 
-/-- Tests imax type inference -/
+/-- Some level computation -/
+good_def levelComp4.{u} : Type 0 := Sort (imax u 0)
+
+/-- Some level computation -/
+good_def levelComp5.{u} : Type u := Sort (imax u u)
+
+/-- Type inference for forall using imax -/
 good_def imax1 : (p : Prop) → Prop := fun p => Type → p
 
-/-- Tests imax type inference -/
+/-- Type inference for forall using imax -/
 good_def imax2 : (α : Type) → Type 1 := fun α => Type → α

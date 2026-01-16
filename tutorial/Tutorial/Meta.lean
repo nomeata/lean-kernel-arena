@@ -2,6 +2,7 @@ import Lean
 import Tutorial.TestCaseEnv
 
 open Lean Elab Term Command
+open Lean.Parser.Command
 
 def addTestCaseDeclCore (descr? : Option String) (decl : Lean.Declaration) (outcome : Outcome) : CoreM Unit := do
   match outcome with
@@ -15,11 +16,11 @@ def addTestCaseDeclCore (descr? : Option String) (decl : Lean.Declaration) (outc
     description := descr?
   }
 
-def addTestCaseDecl (descr? : Option String) (declName : Name) (typeExpr : Expr) (valueExpr : Expr) (outcome : Outcome) (declKind : ConstantKind) : CoreM Unit := do
+def addTestCaseDecl (descr? : Option String) (declName : Name) (levelParams : List Name) (typeExpr : Expr) (valueExpr : Expr) (outcome : Outcome) (declKind : ConstantKind) : CoreM Unit := do
   let decl ← match declKind with
     | .defn => pure <| .defnDecl {
         name := declName
-        levelParams := []
+        levelParams := levelParams
         type := typeExpr
         value := valueExpr
         hints := .opaque
@@ -35,39 +36,38 @@ def addTestCaseDecl (descr? : Option String) (declName : Name) (typeExpr : Expr)
   addTestCaseDeclCore descr? decl outcome
 
 open TSyntax.Compat in -- due to plainDocComments vs. docComment
-def elabAndAddTestCaseDecl (descr? : Option (TSyntax `Lean.Parser.Command.plainDocComment)) (name : Ident) (type : Term) (value : Term) (outcome : Outcome) (declKind : ConstantKind) : CommandElabM Unit := liftTermElabM do
+def elabAndAddTestCaseDecl (descr? : Option (TSyntax ``plainDocComment)) (name : TSyntax ``declId) (type : Term) (value : Term) (outcome : Outcome) (declKind : ConstantKind) : CommandElabM Unit := liftTermElabM do
   let descrStr? ← descr?.mapM (getDocStringText ·)
   let descrStr? := descrStr?.map (·.trimAscii.copy)
-  let declName := name.getId
-  let typeExpr ← instantiateMVars (← elabTerm type none)
-  let valueExpr ← instantiateMVars (← elabTerm value (some typeExpr))
-  addTestCaseDecl descrStr? declName typeExpr valueExpr outcome declKind
+  let (declName, lparams) ← match name with
+    | `(declId| $n:ident) => pure (n.getId, [])
+    | `(declId| $n:ident .{ $[$ls:ident],* }) => pure (n.getId, ls.toList.map (·.getId))
+    | _ => throwUnsupportedSyntax
+  withLevelNames lparams do
+    let typeExpr ← instantiateMVars (← elabTerm type none)
+    let valueExpr ← instantiateMVars (← elabTerm value (some typeExpr))
+    addTestCaseDecl descrStr? declName lparams typeExpr valueExpr outcome declKind
 
-elab descr?:(plainDocComment)? "good_def " name:ident ":" type:term ":=" value:term : command => do
+elab descr?:(plainDocComment)? "good_def " name:declId ":" type:term ":=" value:term : command => do
   elabAndAddTestCaseDecl descr? name type value Outcome.good ConstantKind.defn
 
-elab descr?:(plainDocComment)? "bad_def " name:ident ":" type:term ":=" value:term : command => do
+elab descr?:(plainDocComment)? "bad_def " name:declId ":" type:term ":=" value:term : command => do
   elabAndAddTestCaseDecl descr? name type value Outcome.bad ConstantKind.defn
 
 open TSyntax.Compat in -- due to plainDocComments vs. docComment
-elab descr?:(plainDocComment)? "good_decl " decl:term : command => do
+def elabRawTestDecl (descr? : Option (TSyntax `Lean.Parser.Command.plainDocComment)) (decl : Term) (outcome : Outcome) : CommandElabM Unit := liftTermElabM do
   let descrStr? ← descr?.mapM (getDocStringText ·)
   let descrStr? := descrStr?.map (·.trimAscii.copy)
   let expectedType := Lean.mkConst ``Lean.Declaration
-  liftTermElabM do
-    let declExpr ← elabTerm decl (some expectedType)
-    let decl ← Lean.Meta.MetaM.run' <| unsafe Meta.evalExpr (α := Lean.Declaration) expectedType declExpr
-    addTestCaseDeclCore descrStr? decl Outcome.good
+  let declExpr ← elabTerm decl (some expectedType)
+  let decl ← Lean.Meta.MetaM.run' <| unsafe Meta.evalExpr (α := Lean.Declaration) expectedType declExpr
+  addTestCaseDeclCore descrStr? decl outcome
 
-open TSyntax.Compat in -- due to plainDocComments vs. docComment
+elab descr?:(plainDocComment)? "good_decl " decl:term : command => do
+  elabRawTestDecl descr? decl .good
+
 elab descr?:(plainDocComment)? "bad_decl " decl:term : command => do
-  let descrStr? ← descr?.mapM (getDocStringText ·)
-  let descrStr? := descrStr?.map (·.trimAscii.copy)
-  let expectedType := Lean.mkConst ``Lean.Declaration
-  liftTermElabM do
-    let declExpr ← elabTerm decl (some expectedType)
-    let decl ← Lean.Meta.MetaM.run' <| unsafe Meta.evalExpr (α := Lean.Declaration) expectedType declExpr
-    addTestCaseDeclCore descrStr? decl Outcome.bad
+  elabRawTestDecl descr? decl .bad
 
 section Unchecked
 
