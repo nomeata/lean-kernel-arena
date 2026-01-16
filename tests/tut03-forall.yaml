@@ -1,4 +1,0 @@
-description: Tests dependent product types (forall) with bound variables.
-leanfile: tests/tutorial.lean
-export-decls: ["tut03"]
-outcome: accept

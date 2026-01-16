@@ -1,4 +1,0 @@
-description: Tests function type construction using arrow types.
-leanfile: tests/tutorial.lean
-export-decls: ["tut02"]
-outcome: accept

@@ -1,9 +1,11 @@
 name = "tutorial"
-version = "0.1.0"
+defaultTargets = [ "Tutorial" ]
 
-[[dependencies]]
-name = "std"
-# Use latest std
+[[require]]
+name = "Lean4Export"
+git = "https://github.com/leanprover/lean4export"
+rev = "arena_json_output"
 
-[package]
-preferReleaseBuild = true
+[[lean_lib]]
+name = "Tutorial"
+root = "Tutorial"

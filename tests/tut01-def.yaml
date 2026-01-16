@@ -1,4 +1,0 @@
-description: Tests the simplest form of definition declaration.
-leanfile: tests/tutorial.lean
-export-decls: ["tut01"]
-outcome: accept

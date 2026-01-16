@@ -1,4 +1,0 @@
-description: Tests lambda expressions and function definitions with multiple parameters.
-leanfile: tests/tutorial.lean
-export-decls: ["tut04"]
-outcome: accept

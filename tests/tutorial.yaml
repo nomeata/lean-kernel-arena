@@ -1,0 +1,6 @@
+description: Multiple tutorial tests generated from a Lean project in the tutorial directory.
+dir: tutorial
+multiple: true
+run: |
+  lake clean
+  lake build Tutorial
