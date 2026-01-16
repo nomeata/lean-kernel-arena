@@ -467,8 +467,6 @@ def expand_tests() -> list[dict]:
                         expanded_test["name"] = f"{test['name']}/{subtest_name}"
                         expanded_test["outcome"] = "accept"
                         expanded_test["_is_subtest"] = True
-                        expanded_test["_parent_test"] = test["name"]
-                        expanded_test["_subtest_name"] = subtest_name
                         expanded_test["_test_file"] = ndjson_file
                         expanded_tests.append(expanded_test)
                 
@@ -480,8 +478,6 @@ def expand_tests() -> list[dict]:
                         expanded_test["name"] = f"{test['name']}/{subtest_name}"
                         expanded_test["outcome"] = "reject"
                         expanded_test["_is_subtest"] = True
-                        expanded_test["_parent_test"] = test["name"]
-                        expanded_test["_subtest_name"] = subtest_name
                         expanded_test["_test_file"] = ndjson_file
                         expanded_tests.append(expanded_test)
             # If multiple test directory doesn't exist, skip it (not built yet)
@@ -818,8 +814,6 @@ def create_test(test: dict, output_dir: Path) -> bool:
             stats_file = tmp_output_dir / outcome / f"{subtest_name}.stats.json"
             stats = {
                 "name": f"{name}/{subtest_name}",
-                "parent_test": name,
-                "subtest_name": subtest_name,
                 "outcome": "accept" if outcome == "good" else "reject",
                 "size": file_size,
                 "size_str": size_str,
@@ -1001,17 +995,7 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
     checker_run_cmd = checker["run"]
 
     # Use the _test_file path stored in the test dict
-    test_file = test.get("_test_file")
-    if test_file is None:
-        # Fallback for tests without _test_file (shouldn't happen with updated expand_tests)
-        if test.get("_is_subtest"):
-            parent_test = test["_parent_test"]
-            subtest_name = test["_subtest_name"]
-            # Derive category from outcome
-            category = "good" if test.get("outcome") == "accept" else "bad"
-            test_file = tests_dir / parent_test / category / f"{subtest_name}.ndjson"
-        else:
-            test_file = tests_dir / f"{test_name}.ndjson"
+    test_file = test["_test_file"]
         
     if not test_file.exists():
         result_data = {
@@ -1123,23 +1107,7 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
         built_tests = []
         skipped_test_names = []
         for test in tests:
-            if test.get("_is_subtest"):
-                # For subtests, use _test_file if available, otherwise derive path
-                if "_test_file" in test:
-                    test_file = test["_test_file"]
-                else:
-                    parent_test = test["_parent_test"]
-                    subtest_name = test["_subtest_name"]
-                    # Derive category from outcome
-                    category = "good" if test.get("outcome") == "accept" else "bad"
-                    test_file = tests_dir / parent_test / category / f"{subtest_name}.ndjson"
-            else:
-                # For regular tests, use _test_file if available, otherwise derive path
-                if "_test_file" in test:
-                    test_file = test["_test_file"]
-                else:
-                    test_file = tests_dir / f"{test['name']}.ndjson"
-            
+            test_file = test["_test_file"]
             if test_file.exists():
                 built_tests.append(test)
             else:
@@ -1453,13 +1421,7 @@ def create_test_tarball(tests: list, output_dir: Path) -> dict:
             
             if test.get("_is_subtest"):
                 # Handle subtests
-                test_file = test.get("_test_file")
-                if test_file is None:
-                    # Fallback: derive path from outcome
-                    parent_test = test["_parent_test"]
-                    subtest_name = test["_subtest_name"]
-                    category = "good" if test.get("outcome") == "accept" else "bad"
-                    test_file = build_tests_dir / parent_test / category / f"{subtest_name}.ndjson"
+                test_file = test["_test_file"]
                 
                 if test_file.exists():
                     outcome = test.get("outcome", "unknown")
