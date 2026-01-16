@@ -456,6 +456,7 @@ def find_test_by_name(name: str) -> dict | None:
         return {
             "name": name,
             "file": test_info["file"],
+            "_test_file": test_info["file"],
             **test_info
         }
     return None
@@ -838,7 +839,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
             stats["description"] = test["description"]
         
         # Add source link fields for generate_source_links
-        for field in ["url", "dir", "leanfile", "rev"]:
+        for field in ["url", "dir", "leanfile", "rev", "large"]:
             if test.get(field):
                 stats[field] = test[field]
         
@@ -1086,6 +1087,8 @@ def cmd_run_checker(args: argparse.Namespace) -> int:
             print(f"Test not found: {args.test}")
             return 1
         tests = [test]
+        # Create a minimal test_stats dict for sorting
+        test_stats = {test["name"]: test}
     else:
         # Use unified enumeration - this gives us all built tests with stats
         test_stats = load_test_stats_and_enumerate()
@@ -1463,8 +1466,8 @@ def create_test_tarball(tests: list, output_dir: Path) -> dict:
     
     with tarfile.open(tarball_path, "w:gz") as tar:
         for test in tests:
-            # Skip large tests
-            if test.get("large", False):
+            # Skip large tests (by flag or by size > 1GB)
+            if test.get("large", False) or test.get("size", 0) > 1024*1024*1024:
                 continue
             
             # Use the unified _test_file path for all tests
