@@ -1538,12 +1538,8 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                     }
                     checker_results.append(result)
             
-            # Sort checker results by line count (ascending order)
-            def get_result_line_count(result):
-                test_stats_data = result.get("test_stats", {})
-                return test_stats_data.get("lines", 0)
-            
-            checker_results.sort(key=get_result_line_count)
+            # Sort checker results by name (alphabetical order)
+            checker_results.sort(key=lambda result: result.get("test", ""))
             
             # Create a copy of checker data with rendered description
             checker_with_rendered_desc = checker.copy()
