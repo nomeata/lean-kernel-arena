@@ -2,11 +2,29 @@ name: Build and Deploy Site
 
 on:
   workflow_dispatch: # Manual trigger
-  push: # Trigger on all pushes
 
 jobs:
+  create-runner:
+    name: Create Hetzner Cloud runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.create-hcloud-runner.outputs.label }}
+      server_id: ${{ steps.create-hcloud-runner.outputs.server_id }}
+    steps:
+      - name: Create runner
+        id: create-hcloud-runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: create
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          server_type: ccx23
+          # location: nbg1  # Nuremberg, Germany
+          # image: rocky-9 # Rocky Linux 9
+
   build-and-deploy:
-    runs-on: nscloud-ubuntu-22.04-amd64-8x16
+    needs: create-runner # required to start the main job when the runner is ready
+    runs-on: ${{ needs.create-runner.outputs.label }} # run the job on the newly created runner
     
     permissions:
       contents: read
@@ -75,3 +93,21 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         id: deployment
         uses: actions/deploy-pages@v4
+
+
+  delete-runner:
+    name: Delete Hetzner Cloud runner
+    needs:
+      - create-runner
+      - build-and-deploy
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Delete runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: delete
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          name: ${{ needs.create-runner.outputs.label }}
+          server_id: ${{ needs.create-runner.outputs.server_id }}
