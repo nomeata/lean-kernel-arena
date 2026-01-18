@@ -59,23 +59,26 @@ jobs:
         run: "true"
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
-      - name: Check timing support
+      - name: Check perf support
         run: |
           echo "=== System info ==="
           uname -a || true
-          echo "=== time binary ==="
-          if command -v time >/dev/null 2>&1; then
-            time --version 2>/dev/null || true
-            echo "Using time. Running sample measurement..."
-            # Print wall (real), user, sys and max RSS (KB) when supported
-            time -f "real_seconds=%e\nuser_seconds=%U\nsys_seconds=%S\nmax_rss_kb=%M" sleep 0.1 2>&1 || \
-              { echo "time -f not supported; falling back to shell time"; { time sleep 0.1; } 2>&1 || true; }
-          elif command -v time >/dev/null 2>&1; then
-            echo "shell time available; max RSS may be unavailable."
-            { time sleep 0.1; } 2>&1 || true
+          echo "=== perf binary ==="
+          if command -v perf >/dev/null 2>&1; then
+            perf --version || true
           else
-            echo "time command not found"
+            echo "perf not installed"
           fi
+          echo "=== kernel perf settings ==="
+          for f in /proc/sys/kernel/perf_event_paranoid /proc/sys/kernel/kptr_restrict; do
+            if [ -f "$f" ]; then
+              printf "%s: %s\n" "$f" "$(cat $f)"
+            else
+              printf "%s: (missing)\n" "$f"
+            fi
+          done
+          echo "=== try perf stat (may require privileges) ==="
+          perf stat -e cycles -a -- true 2>&1 || echo "perf stat failed or not permitted"
         shell: 'nix develop -c bash -euxo pipefail {0}'
         continue-on-error: true
       

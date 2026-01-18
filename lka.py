@@ -6,6 +6,7 @@ import datetime
 import fnmatch
 import json
 import os
+import resource
 import shutil
 import subprocess
 import sys
@@ -96,6 +97,25 @@ def format_lines(line_count: int) -> str:
         return str(line_count)
 
 
+def format_instructions(instruction_count: int) -> str:
+    """Format instruction count to a human-readable string with SI prefixes."""
+    if instruction_count >= 1_000_000_000:
+        return f"{instruction_count / 1_000_000_000:.1f}\u202fG"
+    elif instruction_count >= 1_000_000:
+        return f"{instruction_count / 1_000_000:.1f}\u202fM"
+    elif instruction_count >= 1_000:
+        return f"{instruction_count / 1_000:.1f}\u202fk"
+    else:
+        return str(instruction_count)
+
+
+def convert_instructions_to_time(instructions: int, instructions_per_second: float) -> float:
+    """Convert instruction count to equivalent time in seconds."""
+    if instructions_per_second > 0 and instructions > 0:
+        return instructions / instructions_per_second
+    return 0.0
+
+
 def render_markdown(text: str) -> str:
     """Render markdown text to HTML."""
     if not text:
@@ -113,109 +133,135 @@ def measure_perf_with_fallback(
     shell: bool = False,
     capture_output: bool = True,
 ) -> tuple[subprocess.CompletedProcess, dict]:
-    """Run a command and measure performance metrics, with fallback if GNU time is unavailable.
+    """Run a command and measure performance metrics using perf, with basic fallback.
     
     Returns:
         Tuple of (subprocess result, metrics dict)
         
     Metrics dict contains:
     - wall_time: Wall clock time in seconds
-    - cpu_time: CPU time in seconds (measured via GNU time or derived from rusage)
-    - max_rss: Maximum RSS in bytes
+    - cpu_time: CPU time in seconds (measured via perf task-clock, 0 if unavailable)
+    - max_rss: Maximum RSS in bytes (estimated)
+    - instructions: Instruction count (measured via perf, 0 if unavailable)
     """
     # Record wall time manually as fallback
     start_wall_time = time.time()
     
-    # Try to use GNU `time` if available for structured measurements
+    # Try to use perf if available
     metrics = {}
-    use_gnu_time = False
+    use_perf = False
+    
+    # Check if perf is available
     try:
-        time_check = subprocess.run(["time", "--version"], capture_output=True, timeout=2)
-        if time_check.returncode == 0:
-            use_gnu_time = True
+        perf_check = subprocess.run(
+            ["perf", "--version"], 
+            capture_output=True, 
+            timeout=2
+        )
+        if perf_check.returncode == 0:
+            use_perf = True
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        use_gnu_time = False
-
-    if use_gnu_time:
-        # Use GNU time to collect real/user/sys and max RSS
+        use_perf = False
+    
+    if use_perf:
+        # Use perf for comprehensive measurements
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp:
             tmp_path = tmp.name
-
-        # Format string that GNU time understands
-        fmt = "real_seconds=%e\nuser_seconds=%U\nsys_seconds=%S\nmax_rss_kb=%M"
-
+        
         try:
             if isinstance(cmd, list):
-                time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--", *cmd]
+                perf_cmd = [
+                    "perf", "stat", "-j", "-o", tmp_path,
+                    "-e", "duration_time",  # wall-clock time
+                    "-e", "task-clock",     # cpu time
+                    "-e", "instructions",   # instruction count
+                    "--", *cmd
+                ]
             else:
-                # When shell=True we need to run via sh -c
+                perf_cmd = [
+                    "perf", "stat", "-j", "-o", tmp_path,
+                    "-e", "duration_time",
+                    "-e", "task-clock",
+                    "-e", "instructions",
+                    "--"
+                ]
                 if shell:
-                    time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--", "sh", "-c", cmd]
+                    perf_cmd.extend(["sh", "-c", cmd])
                 else:
-                    time_cmd = ["time", "-f", fmt, "-o", tmp_path, "--"] + cmd.split()
-
+                    perf_cmd.extend(cmd.split())
+            
+            # Set up environment
+            perf_env = (env or os.environ).copy()
+            perf_env["LC_ALL"] = "C"  # Ensure perf outputs valid JSON
+            
+            # Run with perf
             result = subprocess.run(
-                time_cmd,
+                perf_cmd,
                 cwd=cwd,
-                env=(env or os.environ).copy(),
-                shell=False,
+                env=perf_env,
+                shell=False,  # perf handles shell execution
                 capture_output=capture_output,
                 text=True,
             )
-
-            # Read metrics from tmp file
-            time_metrics = {}
+            
+            # Parse perf output
+            perf_metrics = {}
             try:
                 with open(tmp_path, 'r') as f:
                     for line in f:
                         line = line.strip()
-                        if not line:
-                            continue
-                        if '=' in line:
-                            k, v = line.split('=', 1)
-                            time_metrics[k.strip()] = v.strip()
+                        if line:
+                            try:
+                                data = json.loads(line)
+                                if "event" in data and "counter-value" in data:
+                                    event = data["event"]
+                                    value = float(data["counter-value"])
+                                    unit = data.get("unit", "")
+                                    
+                                    if event in ["duration_time", "task-clock"]:
+                                        # Time events are in nanoseconds by default
+                                        if unit == "msec":
+                                            value *= 1e-3
+                                        elif unit == "ns" or unit == "":
+                                            value *= 1e-9  # Convert nanoseconds to seconds
+                                        perf_metrics[event] = value
+                                    elif event == "instructions":
+                                        # Instructions are count (no unit conversion needed)
+                                        perf_metrics[event] = int(value)
+                            except (json.JSONDecodeError, ValueError, KeyError):
+                                continue
             except Exception:
                 pass
             finally:
                 try:
                     os.unlink(tmp_path)
-                except Exception:
+                except:
                     pass
-
-            # Fill metrics with sensible fallbacks
+            
+            # Extract metrics with fallback to manual timing
+            metrics["wall_time"] = perf_metrics.get("duration_time", time.time() - start_wall_time)
+            metrics["cpu_time"] = perf_metrics.get("task-clock", 0.0)
+            metrics["instructions"] = perf_metrics.get("instructions", 0)
+            
+            # Get memory info from perf record if available (fallback to ps)
+            # For now, use a simple approach with ps to get max RSS
             try:
-                metrics["wall_time"] = float(time_metrics.get("real_seconds", time.time() - start_wall_time))
+                # This is a rough approximation - perf doesn't directly measure RSS
+                # We'll fall back to the previous method for memory measurement
+                final_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
+                maxrss = final_rusage.ru_maxrss
+                if sys.platform == "linux":
+                    maxrss *= 1024  # Convert KB to bytes on Linux
+                metrics["max_rss"] = maxrss
             except Exception:
-                metrics["wall_time"] = time.time() - start_wall_time
-
-            try:
-                user_s = float(time_metrics.get("user_seconds", "0"))
-                sys_s = float(time_metrics.get("sys_seconds", "0"))
-                metrics["cpu_time"] = user_s + sys_s
-            except Exception:
-                metrics["cpu_time"] = 0.0
-
-            try:
-                max_rss_kb = int(time_metrics.get("max_rss_kb", "0"))
-                metrics["max_rss"] = max_rss_kb * 1024
-            except Exception:
-                metrics["max_rss"] = 0.0
-
+                metrics["max_rss"] = 0
+        
         except Exception:
-            # If GNU time fails for any reason, run normally and fall back
-            result = subprocess.run(
-                cmd,
-                cwd=cwd,
-                env=env,
-                shell=shell,
-                capture_output=capture_output,
-                text=True,
-            )
-            metrics["wall_time"] = time.time() - start_wall_time
-            metrics["cpu_time"] = 0.0
-            metrics["max_rss"] = 0.0
-    else:
-        # Fallback: run normally and measure wall time
+            # If perf fails completely, fall back to basic measurement
+            use_perf = False
+    
+    if not use_perf:
+        # Final fallback: run normally and measure wall time only
         result = subprocess.run(
             cmd,
             cwd=cwd,
@@ -225,8 +271,9 @@ def measure_perf_with_fallback(
             text=True,
         )
         metrics["wall_time"] = time.time() - start_wall_time
-        metrics["cpu_time"] = 0.0  # Not measured here (no GNU time available)
+        metrics["cpu_time"] = 0.0  # Not measured here
         metrics["max_rss"] = 0.0
+        metrics["instructions"] = 0
     
     return result, metrics
 
@@ -254,6 +301,7 @@ def run_cmd(
         - wall_time: Wall clock time in seconds
         - cpu_time: CPU time in seconds (if available)
         - max_rss: Maximum RSS in bytes (if available)
+        - instructions: Instruction count (if available)
     """
     global VERBOSE
     
@@ -277,12 +325,15 @@ def run_cmd(
         result.wall_time = metrics["wall_time"]
         result.cpu_time = metrics["cpu_time"]
         result.max_rss = metrics["max_rss"]
+        result.instructions = metrics.get("instructions", 0)
         
         if VERBOSE:
             status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
             metrics_str = f"wall: {format_duration(result.wall_time)}"
             metrics_str += f", cpu: {format_duration(result.cpu_time)}"
             metrics_str += f", rss: {format_memory(result.max_rss)}"
+            if result.instructions > 0:
+                metrics_str += f", inst: {result.instructions:,}"
             print(f"      -> {status} ({metrics_str})")
     else:
         # Use simple timing
@@ -303,6 +354,7 @@ def run_cmd(
         result.wall_time = elapsed
         result.cpu_time = 0.0  # Not measured
         result.max_rss = 0.0   # Not measured
+        result.instructions = 0  # Not measured
         
         if VERBOSE:
             status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
@@ -1015,6 +1067,7 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
             "wall_time": 0,
             "cpu_time": 0,
             "max_rss": 0,
+            "instructions": 0,
             "stdout": "",
             "stderr": "",
         }
@@ -1060,6 +1113,7 @@ def run_checker_on_test(checker: dict, test: dict, build_dir: Path, tests_dir: P
         "wall_time": result.wall_time,
         "cpu_time": result.cpu_time,
         "max_rss": result.max_rss,
+        "instructions": getattr(result, 'instructions', 0),
         "stdout": result.stdout,
         "stderr": result.stderr,
     }
@@ -1231,6 +1285,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     - mathlib_time: wall time for the mathlib test (or None)
     - mathlib_cpu_time: CPU time for the mathlib test (or None)
     - mathlib_max_rss: Max RSS for the mathlib test (or None)
+    - mathlib_instructions: instruction count for the mathlib test (or None)
     """
     checker_name = checker["name"]
     
@@ -1242,6 +1297,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
     mathlib_time = None
     mathlib_cpu_time = None
     mathlib_max_rss = None
+    mathlib_instructions = 0
     
     for test in tests:
         test_name = test["name"]
@@ -1260,6 +1316,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
             mathlib_time = result.get("wall_time")
             mathlib_cpu_time = result.get("cpu_time")
             mathlib_max_rss = result.get("max_rss")
+            mathlib_instructions = result.get("instructions", 0) or 0
         
         # Count declined tests
         if status == "declined":
@@ -1284,6 +1341,7 @@ def compute_checker_stats(checker: dict, tests: list[dict], results: dict) -> di
         "mathlib_time": mathlib_time,
         "mathlib_cpu_time": mathlib_cpu_time,
         "mathlib_max_rss": mathlib_max_rss,
+        "mathlib_instructions": mathlib_instructions,
     }
 
 
@@ -1457,6 +1515,25 @@ def cmd_build_site(args: argparse.Namespace) -> int:
     results = load_results()
     tests = load_tests()
     
+    # Calculate global instructions per second from results with both cpu_time and instructions
+    total_instructions = 0
+    total_cpu_time = 0
+    instruction_samples = 0
+    
+    for result in results.values():
+        cpu_time = result.get("cpu_time", 0)
+        instructions = result.get("instructions", 0)
+        if cpu_time > 0 and instructions > 0:
+            total_instructions += instructions
+            total_cpu_time += cpu_time
+            instruction_samples += 1
+    
+    # Calculate average instructions per second
+    if total_cpu_time > 0 and instruction_samples > 0:
+        instructions_per_second = total_instructions / total_cpu_time
+    else:
+        instructions_per_second = 0
+    
     # Compute stats for each checker
     for checker in checkers:
         checker["stats"] = compute_checker_stats(checker, tests, results)
@@ -1495,6 +1572,9 @@ def cmd_build_site(args: argparse.Namespace) -> int:
         "checkers": checkers,
         "format_duration": format_duration,
         "format_memory": format_memory,
+        "format_instructions": format_instructions,
+        "convert_instructions_to_time": convert_instructions_to_time,
+        "instructions_per_second": instructions_per_second,
         "build_info": build_info,
         "tarball_info": tarball_info,
     }
@@ -1551,6 +1631,9 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                 "results": checker_results,
                 "format_duration": format_duration,
                 "format_memory": format_memory,
+                "format_instructions": format_instructions,
+                "convert_instructions_to_time": convert_instructions_to_time,
+                "instructions_per_second": instructions_per_second,
                 "build_info": build_info,
             }
             

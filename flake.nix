@@ -17,7 +17,7 @@
           elan
           rustc 
           cargo
-          time
+          perf
         ];
       };
     };
