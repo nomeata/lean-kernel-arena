@@ -38,10 +38,10 @@ jobs:
         run: |
           set -exuo pipefail
           if [ -z "${HOME:-}" ]; then
-            HOME=$(getent passwd "$(id -u)" | cut -d: -f6)
+            HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
             export HOME
           fi
-          echo "HOME=$HOME" >> $GITHUB_ENV
+          echo "HOME=$HOME" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v4
