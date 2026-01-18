@@ -66,7 +66,9 @@
                     {% endif %}
                 </td>
                 <td class="text-right">
-                    {% if checker.stats.mathlib_cpu_time is not none %}
+                    {% if checker.stats.get('mathlib_instructions', 0) > 0 and instructions_per_second > 0 %}
+                        <span title="{{ format_instructions(checker.stats.get('mathlib_instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(checker.stats.get('mathlib_instructions', 0), instructions_per_second)) }}</span>
+                    {% elif checker.stats.mathlib_cpu_time is not none %}
                         {{ format_duration(checker.stats.mathlib_cpu_time) }}
                     {% else %}
                         -
@@ -99,7 +101,10 @@
     </p>
 
     <p>
-        The time and space measurements refer to the <tt>mathlib</tt> test case, the largest correct test in the suite. Currently, the checkers are executed on a shared machine, so timing is not very precise.
+        The time and space measurements refer to the <tt>mathlib</tt> test case, the largest correct test in the suite. 
+        {% if instructions_per_second > 0 %}
+            CPU time measurements are based on instruction counts when available, converted to equivalent time using an average rate of {{ "%.1f"|format(instructions_per_second / 1000000000) }} billion instructions per second across all measurements.
+        {% endif %}
     </p>
 
     <p>

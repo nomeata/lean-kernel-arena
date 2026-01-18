@@ -128,7 +128,9 @@ section pre, details pre {
                 </td>
                 <td class="text-right">{{ format_duration(result.wall_time or 0) }}</td>
                 <td class="text-right">
-                    {% if result.cpu_time is not none %}
+                    {% if result.get('instructions', 0) > 0 and instructions_per_second > 0 %}
+                        <span title="{{ format_instructions(result.get('instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(result.get('instructions', 0), instructions_per_second)) }}</span>
+                    {% elif result.cpu_time is not none %}
                         {{ format_duration(result.cpu_time) }}
                     {% else %}
                         -
@@ -183,7 +185,9 @@ section pre, details pre {
         </span>
         · exit code {{ result.exit_code }}
         · wall: {{ format_duration(result.wall_time or 0) }}
-        {% if result.cpu_time is not none %}
+        {% if result.get('instructions', 0) > 0 and instructions_per_second > 0 %}
+        · cpu: <span title="{{ format_instructions(result.get('instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(result.get('instructions', 0), instructions_per_second)) }}</span>
+        {% elif result.cpu_time is not none %}
         · cpu: {{ format_duration(result.cpu_time) }}
         {% endif %}
         {% if result.max_rss is not none %}
