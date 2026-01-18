@@ -21,6 +21,7 @@ jobs:
           server_type: ccx23
           location: nbg1  # Nuremberg, Germany
           image: ubuntu-24.04
+          ssh_key: 105848750 # Joachim's ssh key registered in Hetzner Cloud
 
   build-and-deploy:
     needs: create-runner # required to start the main job when the runner is ready
