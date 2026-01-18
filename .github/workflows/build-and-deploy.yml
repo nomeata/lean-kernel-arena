@@ -2,11 +2,33 @@ name: Build and Deploy Site
 
 on:
   workflow_dispatch: # Manual trigger
-  push: # Trigger on all pushes
+  pull_request: # Run on pull requests
 
 jobs:
+  create-runner:
+    name: Create Hetzner Cloud runner
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'  # Only create runner for manual dispatch
+    outputs:
+      label: ${{ steps.create-hcloud-runner.outputs.label }}
+      server_id: ${{ steps.create-hcloud-runner.outputs.server_id }}
+    steps:
+      - name: Create runner
+        id: create-hcloud-runner
+        uses: Cyclenerd/hcloud-github-runner@v1.3.0
+        with:
+          mode: create
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          server_type: ccx23
+          location: nbg1  # Nuremberg, Germany
+          image: ubuntu-24.04
+          ssh_key: 105848750 # Joachim's ssh key registered in Hetzner Cloud
+
   build-and-deploy:
-    runs-on: nscloud-ubuntu-22.04-amd64-8x16
+    needs: create-runner # required to start the main job when the runner is ready
+    runs-on: ${{ needs.create-runner.outputs.label || 'ubuntu-latest' }} # run on custom runner if available, otherwise default
+    if: always() # Run even if create-runner was skipped
     
     permissions:
       contents: read
@@ -14,11 +36,21 @@ jobs:
       id-token: write
     
     steps:
+      # Workaround for: https://github.com/actions/runner/issues/1864
+      - name: Ensure HOME is defined
+        run: |
+          set -exuo pipefail
+          if [ -z "${HOME:-}" ]; then
+            HOME="$(getent passwd "$(id -u)" | cut -d: -f6)"
+            export HOME
+          fi
+          echo "HOME=$HOME" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@v4
       
       - name: Install Nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -51,7 +83,7 @@ jobs:
         continue-on-error: true
       
       - name: Generate tests
-        run: ./lka.py build-test ${{ github.event_name == 'push' && '--no-large' || '' }}
+        run: ./lka.py build-test ${{ github.event_name == 'workflow_dispatch' && '' || '--no-large' }}
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Build checkers
@@ -75,3 +107,21 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         id: deployment
         uses: actions/deploy-pages@v4
+
+
+  delete-runner:
+    name: Delete Hetzner Cloud runner
+    needs:
+      - create-runner
+      - build-and-deploy
+    runs-on: ubuntu-latest
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.create-runner.result != 'skipped' }} # Only delete if runner was created
+    steps:
+      - name: Delete runner
+        uses: Cyclenerd/hcloud-github-runner@v1
+        with:
+          mode: delete
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          hcloud_token: ${{ secrets.HCLOUD_TOKEN }}
+          name: ${{ needs.create-runner.outputs.label }}
+          server_id: ${{ needs.create-runner.outputs.server_id }}
