@@ -85,16 +85,18 @@ def format_memory(bytes_value: float) -> str:
         return f"{bytes_value:.0f}\u202fB"
 
 
-def format_lines(line_count: int) -> str:
-    """Format line count to a human-readable string with SI prefixes."""
-    if line_count >= 1_000_000_000:
-        return f"{line_count / 1_000_000_000:.1f}\u202fG"
-    elif line_count >= 1_000_000:
-        return f"{line_count / 1_000_000:.1f}\u202fM"
-    elif line_count >= 1_000:
-        return f"{line_count / 1_000:.1f}\u202fk"
+def format_unitless(count: int) -> str:
+    """Format unitless count to a human-readable string with SI prefixes."""
+    if count >= 1_000_000_000_000:
+        return f"{count / 1_000_000_000_000:.1f}\u202fT"
+    elif count >= 1_000_000_000:
+        return f"{count / 1_000_000_000:.1f}\u202fG"
+    elif count >= 1_000_000:
+        return f"{count / 1_000_000:.1f}\u202fM"
+    elif count >= 1_000:
+        return f"{count / 1_000:.1f}\u202fk"
     else:
-        return str(line_count)
+        return str(count)
 
 
 def format_instructions(instruction_count: int) -> str:
@@ -133,16 +135,16 @@ def measure_perf_with_fallback(
     shell: bool = False,
     capture_output: bool = True,
 ) -> tuple[subprocess.CompletedProcess, dict]:
-    """Run a command and measure performance metrics using perf, with basic fallback.
+    """Run a command and measure performance metrics using perf + GNU time, with fallback.
     
     Returns:
         Tuple of (subprocess result, metrics dict)
         
     Metrics dict contains:
     - wall_time: Wall clock time in seconds
-    - cpu_time: CPU time in seconds (measured via perf task-clock, 0 if unavailable)
-    - max_rss: Maximum RSS in bytes (estimated)
-    - instructions: Instruction count (measured via perf, 0 if unavailable)
+    - cpu_time: CPU time in seconds (measured via perf task-clock)
+    - max_rss: Maximum RSS in bytes (measured via GNU time)
+    - instructions: Instruction count (measured via perf)
     """
     # Record wall time manually as fallback
     start_wall_time = time.time()
@@ -164,42 +166,45 @@ def measure_perf_with_fallback(
         use_perf = False
     
     if use_perf:
-        # Use perf for comprehensive measurements
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp:
-            tmp_path = tmp.name
+        # Use perf + GNU time for comprehensive measurements
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".perf") as perf_tmp:
+            perf_tmp_path = perf_tmp.name
+        
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix=".time") as time_tmp:
+            time_tmp_path = time_tmp.name
         
         try:
+            # Build nested command: perf stat ... -- time -f "..." -o tmpfile -- original_command
+            perf_cmd = [
+                "perf", "stat", "-j", "-o", perf_tmp_path,
+                "-e", "duration_time",  # wall-clock time
+                "-e", "task-clock",     # cpu time
+                "-e", "instructions",   # instruction count
+                "--"
+            ]
+            
+            # Add GNU time wrapper for max RSS measurement
+            time_fmt = "real_seconds=%e\nuser_seconds=%U\nsys_seconds=%S\nmax_rss_kb=%M"
+            time_cmd = ["time", "-f", time_fmt, "-o", time_tmp_path, "--"]
+            
             if isinstance(cmd, list):
-                perf_cmd = [
-                    "perf", "stat", "-j", "-o", tmp_path,
-                    "-e", "duration_time",  # wall-clock time
-                    "-e", "task-clock",     # cpu time
-                    "-e", "instructions",   # instruction count
-                    "--", *cmd
-                ]
+                full_cmd = perf_cmd + time_cmd + cmd
             else:
-                perf_cmd = [
-                    "perf", "stat", "-j", "-o", tmp_path,
-                    "-e", "duration_time",
-                    "-e", "task-clock",
-                    "-e", "instructions",
-                    "--"
-                ]
                 if shell:
-                    perf_cmd.extend(["sh", "-c", cmd])
+                    full_cmd = perf_cmd + time_cmd + ["sh", "-c", cmd]
                 else:
-                    perf_cmd.extend(cmd.split())
+                    full_cmd = perf_cmd + time_cmd + cmd.split()
             
             # Set up environment
             perf_env = (env or os.environ).copy()
             perf_env["LC_ALL"] = "C"  # Ensure perf outputs valid JSON
             
-            # Run with perf
+            # Run with nested perf + time
             result = subprocess.run(
-                perf_cmd,
+                full_cmd,
                 cwd=cwd,
                 env=perf_env,
-                shell=False,  # perf handles shell execution
+                shell=False,
                 capture_output=capture_output,
                 text=True,
             )
@@ -207,7 +212,7 @@ def measure_perf_with_fallback(
             # Parse perf output
             perf_metrics = {}
             try:
-                with open(tmp_path, 'r') as f:
+                with open(perf_tmp_path, 'r') as f:
                     for line in f:
                         line = line.strip()
                         if line:
@@ -232,32 +237,42 @@ def measure_perf_with_fallback(
                                 continue
             except Exception:
                 pass
-            finally:
-                try:
-                    os.unlink(tmp_path)
-                except:
-                    pass
             
-            # Extract metrics with fallback to manual timing
+            # Parse GNU time output
+            time_metrics = {}
+            try:
+                with open(time_tmp_path, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if '=' in line:
+                            k, v = line.split('=', 1)
+                            time_metrics[k.strip()] = v.strip()
+            except Exception:
+                pass
+            
+            # Clean up temporary files
+            try:
+                os.unlink(perf_tmp_path)
+                os.unlink(time_tmp_path)
+            except:
+                pass
+            
+            # Extract metrics with fallbacks
             metrics["wall_time"] = perf_metrics.get("duration_time", time.time() - start_wall_time)
             metrics["cpu_time"] = perf_metrics.get("task-clock", 0.0)
             metrics["instructions"] = perf_metrics.get("instructions", 0)
             
-            # Get memory info from perf record if available (fallback to ps)
-            # For now, use a simple approach with ps to get max RSS
+            # Extract max RSS from GNU time
             try:
-                # This is a rough approximation - perf doesn't directly measure RSS
-                # We'll fall back to the previous method for memory measurement
-                final_rusage = resource.getrusage(resource.RUSAGE_CHILDREN)
-                maxrss = final_rusage.ru_maxrss
-                if sys.platform == "linux":
-                    maxrss *= 1024  # Convert KB to bytes on Linux
-                metrics["max_rss"] = maxrss
+                max_rss_kb = int(time_metrics.get("max_rss_kb", "0"))
+                metrics["max_rss"] = max_rss_kb * 1024  # Convert KB to bytes
             except Exception:
                 metrics["max_rss"] = 0
         
         except Exception:
-            # If perf fails completely, fall back to basic measurement
+            # If perf+time fails completely, fall back to basic measurement
             use_perf = False
     
     if not use_perf:
@@ -330,8 +345,11 @@ def run_cmd(
         if VERBOSE:
             status = "ok" if result.returncode == 0 else f"FAILED (exit {result.returncode})"
             metrics_str = f"wall: {format_duration(result.wall_time)}"
-            metrics_str += f", cpu: {format_duration(result.cpu_time)}"
+            # Show real CPU time from perf (task-clock), not converted from instructions
+            if result.cpu_time > 0:
+                metrics_str += f", cpu: {format_duration(result.cpu_time)}"
             metrics_str += f", rss: {format_memory(result.max_rss)}"
+            # Show instruction count separately
             if result.instructions > 0:
                 metrics_str += f", inst: {result.instructions:,}"
             print(f"      -> {status} ({metrics_str})")
@@ -838,7 +856,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
             
             # Format file size and line count
             size_str = format_memory(file_size)
-            lines_str = format_lines(line_count)
+            lines_str = format_unitless(line_count)
                 
             # Write stats JSON file
             stats_file = tmp_output_dir / outcome / f"{subtest_name}.stats.json"
@@ -890,7 +908,7 @@ def create_test(test: dict, output_dir: Path) -> bool:
         
         # Format file size and line count
         size_str = format_memory(file_size)
-        lines_str = format_lines(line_count)
+        lines_str = format_unitless(line_count)
 
         print(f"  Created {output_file} ({size_str}, {lines_str} lines)")
 
@@ -1543,20 +1561,20 @@ def cmd_build_site(args: argparse.Namespace) -> int:
     # 2. Number of good tests accepted (descending - more is good)  
     # 3. Number of good tests not accepted (ascending - fewer mistakes is better) 
     # 4. Number of tests declined (ascending - fewer declines is better)
-    # 5. Wall time for processing mathlib (ascending, with None values last)
+    # 5. Instruction count for processing mathlib (ascending, with None/0 values last)
     def sort_key(checker):
         stats = checker["stats"]
         bad_not_rejected = stats["reject_total"] - stats["reject_correct"]  # Should be low
         good_accepted = stats["accept_correct"]  # Should be high
         good_not_accepted = stats["accept_total"] - stats["accept_correct"]  # Should be low
         declined_count = stats["declined_count"]  # Should be low
-        mathlib_time = stats["mathlib_time"]
+        mathlib_instructions = stats["mathlib_instructions"]
         
-        # For mathlib_time: None values should be treated as infinity (sort last)
-        time_sort_key = mathlib_time if mathlib_time is not None else float('inf')
+        # For mathlib_instructions: None/0 values should be treated as infinity (sort last)
+        instructions_sort_key = mathlib_instructions if mathlib_instructions and mathlib_instructions > 0 else float('inf')
         
         # Note: For descending sort on good_accepted, we negate it
-        return (bad_not_rejected, -good_accepted, good_not_accepted, declined_count, time_sort_key)
+        return (bad_not_rejected, -good_accepted, good_not_accepted, declined_count, instructions_sort_key)
     
     checkers.sort(key=sort_key)
 
@@ -1573,6 +1591,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
         "format_duration": format_duration,
         "format_memory": format_memory,
         "format_instructions": format_instructions,
+        "format_unitless": format_unitless,
         "convert_instructions_to_time": convert_instructions_to_time,
         "instructions_per_second": instructions_per_second,
         "build_info": build_info,
@@ -1616,6 +1635,12 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                         "declaration_url": test.get("declaration_url"),
                         "source_url": test.get("source_url")
                     }
+                    
+                    # Add official checker results for comparison (if available)
+                    official_key = ("official", test["name"])
+                    official_result = results.get(official_key)
+                    result["official"] = official_result
+                    
                     checker_results.append(result)
             
             # Sort checker results by name (alphabetical order)
@@ -1632,6 +1657,7 @@ def cmd_build_site(args: argparse.Namespace) -> int:
                 "format_duration": format_duration,
                 "format_memory": format_memory,
                 "format_instructions": format_instructions,
+                "format_unitless": format_unitless,
                 "convert_instructions_to_time": convert_instructions_to_time,
                 "instructions_per_second": instructions_per_second,
                 "build_info": build_info,

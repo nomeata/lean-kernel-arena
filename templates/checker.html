@@ -113,7 +113,9 @@ section pre, details pre {
                 <th class="text-center">Result</th>
                 <th class="text-right">Wall Time</th>
                 <th class="text-right">CPU Time</th>
+                <th class="text-right"></th>
                 <th class="text-right">Max RSS</th>
+                <th class="text-right"></th>
             </tr>
         </thead>
         <tbody>
@@ -137,8 +139,38 @@ section pre, details pre {
                     {% endif %}
                 </td>
                 <td class="text-right">
+                    {# CPU Time comparison - only show if test expected to succeed, both succeeded, official took >=1s #}
+                    {% if result.expected == 'accept' and result.status == 'accepted' and result.official and result.official.status == 'accepted' %}
+                        {% set official_cpu_time = convert_instructions_to_time(result.official.get('instructions', 0), instructions_per_second) if result.official.get('instructions', 0) > 0 and instructions_per_second > 0 else result.official.cpu_time %}
+                        {% set current_cpu_time = convert_instructions_to_time(result.get('instructions', 0), instructions_per_second) if result.get('instructions', 0) > 0 and instructions_per_second > 0 else result.cpu_time %}
+                        {% if official_cpu_time and official_cpu_time >= 1.0 and current_cpu_time %}
+                            {% set percent_change = ((current_cpu_time - official_cpu_time) / official_cpu_time * 100) | round(0) | int %}
+                            {% if percent_change > 0 %}(+{{ percent_change }}%){% elif percent_change < 0 %}({{ percent_change }}%){% else %}(0%){% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="text-right">
                     {% if result.max_rss is not none %}
                         {{ format_memory(result.max_rss) }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {# Memory comparison - only show if test expected to succeed, both succeeded, official used >=200MB #}
+                    {% if result.expected == 'accept' and result.status == 'accepted' and result.official and result.official.status == 'accepted' %}
+                        {% set official_memory = result.official.max_rss %}
+                        {% set current_memory = result.max_rss %}
+                        {% if official_memory and official_memory >= 200*1024*1024 and current_memory %}
+                            {% set percent_change = ((current_memory - official_memory) / official_memory * 100) | round(0) | int %}
+                            {% if percent_change > 0 %}(+{{ percent_change }}%){% elif percent_change < 0 %}({{ percent_change }}%){% else %}(0%){% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
                     {% else %}
                         -
                     {% endif %}
@@ -185,10 +217,11 @@ section pre, details pre {
         </span>
         · exit code {{ result.exit_code }}
         · wall: {{ format_duration(result.wall_time or 0) }}
-        {% if result.get('instructions', 0) > 0 and instructions_per_second > 0 %}
-        · cpu: <span title="{{ format_instructions(result.get('instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(result.get('instructions', 0), instructions_per_second)) }}</span>
-        {% elif result.cpu_time is not none %}
-        · cpu: {{ format_duration(result.cpu_time) }}
+        {% if result.cpu_time is not none and result.cpu_time > 0 %}
+        · real cpu: {{ format_duration(result.cpu_time) }}
+        {% endif %}
+        {% if result.get('instructions', 0) > 0 %}
+        · inst: {{ format_instructions(result.get('instructions', 0)) }}
         {% endif %}
         {% if result.max_rss is not none %}
         · rss: {{ format_memory(result.max_rss) }}
