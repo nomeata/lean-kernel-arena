@@ -134,8 +134,6 @@ section pre, details pre {
                         <span title="{{ format_instructions(result.get('instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(result.get('instructions', 0), instructions_per_second)) }}</span>
                     {% elif result.cpu_time is not none %}
                         {{ format_duration(result.cpu_time) }}
-                    {% else %}
-                        -
                     {% endif %}
                 </td>
                 <td class="text-right">
@@ -149,8 +147,6 @@ section pre, details pre {
                         {% else %}
                             -
                         {% endif %}
-                    {% else %}
-                        -
                     {% endif %}
                 </td>
                 <td class="text-right">
