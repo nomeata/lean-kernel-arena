@@ -189,7 +189,14 @@ section pre, details pre {
         <strong>Expected:</strong> 
         {% if result.expected == 'accept' %}✅ accept{% elif result.expected == 'reject' %}❌ reject{% else %}⚠️ {{ result.expected }}{% endif %}
         {% if result.test_stats %}
-        · <strong>Size:</strong> {{ result.test_stats.size_str }} ({{ result.test_stats.lines_str }} lines)
+        · <strong>Size:</strong> {{ result.test_stats.size_str }}
+        · <strong>Lines:</strong> {{ result.test_stats.lines_str }}
+        {% endif %}
+        {% if result.test_stats.lean4export_version %}
+        · <strong>lean4export:</strong> {{ result.test_stats.lean4export_version }}
+        {% endif %}
+        {% if result.test_stats.lean_version %}
+        · <strong>Lean:</strong> {{ result.test_stats.lean_version }}
         {% endif %}
         {% if result.test_links.declaration_url or result.test_links.source_url %} · {% endif %}
         {% if result.test_links.declaration_url %}
