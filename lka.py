@@ -128,6 +128,40 @@ def render_markdown(text: str) -> str:
     return md.convert(text.strip())
 
 
+def extract_ndjson_metadata(ndjson_file: Path) -> dict:
+    """Extract metadata from the first line of an NDJSON file.
+    
+    Returns a dict with extracted version information:
+    - lean4export_version: Version of lean4export tool (if available)
+    - lean_version: Version of Lean compiler (if available)
+    - lean_githash: Git hash of Lean compiler (if available)
+    """
+    metadata = {}
+    try:
+        with open(ndjson_file, 'r') as f:
+            first_line = f.readline().strip()
+            if first_line:
+                data = json.loads(first_line)
+                # Look for metadata structure
+                if "meta" in data:
+                    meta = data["meta"]
+                    # Extract lean4export version
+                    if "exporter" in meta and "version" in meta["exporter"]:
+                        metadata["lean4export_version"] = meta["exporter"]["version"]
+                    # Extract Lean version info
+                    if "lean" in meta:
+                        lean_info = meta["lean"]
+                        if "version" in lean_info:
+                            metadata["lean_version"] = lean_info["version"]
+                        if "githash" in lean_info:
+                            metadata["lean_githash"] = lean_info["githash"]
+    except Exception as e:
+        # Silently ignore metadata extraction errors
+        pass
+    
+    return metadata
+
+
 def measure_perf_with_fallback(
     cmd: str | list[str],
     cwd: Path | None = None,
@@ -854,6 +888,9 @@ def create_test(test: dict, output_dir: Path) -> bool:
             with open(subtest_file, "r") as f:
                 line_count = sum(1 for _ in f)
             
+            # Extract metadata from the NDJSON file
+            subtest_metadata = extract_ndjson_metadata(subtest_file)
+            
             # Format file size and line count
             size_str = format_memory(file_size)
             lines_str = format_unitless(line_count)
@@ -869,6 +906,9 @@ def create_test(test: dict, output_dir: Path) -> bool:
                 "lines_str": lines_str,
                 "yaml_file": f"tests/{name}.yaml",
             }
+            
+            # Add metadata from NDJSON file
+            stats.update(subtest_metadata)
             
             # Generate and store source links from parent test
             build_info = get_build_metadata()
@@ -906,6 +946,9 @@ def create_test(test: dict, output_dir: Path) -> bool:
         with open(output_file, "r") as f:
             line_count = sum(1 for _ in f)
         
+        # Extract metadata from the NDJSON file
+        test_metadata = extract_ndjson_metadata(output_file)
+        
         # Format file size and line count
         size_str = format_memory(file_size)
         lines_str = format_unitless(line_count)
@@ -923,6 +966,10 @@ def create_test(test: dict, output_dir: Path) -> bool:
             "yaml_file": f"tests/{name}.yaml",
             "outcome": test.get("outcome"),
         }
+        
+        # Add metadata from NDJSON file
+        stats.update(test_metadata)
+        
         # Add description from YAML if present
         if test.get("description"):
             stats["description"] = test["description"]
