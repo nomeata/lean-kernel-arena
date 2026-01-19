@@ -86,7 +86,7 @@ jobs:
         continue-on-error: true
       
       - name: Generate tests
-        run: ./lka.py build-test ${{ github.event_name == 'push' && '--no-large' || '' }}
+        run: ./lka.py build-test ${{ github.event_name == 'workflow_dispatch' && '' || '--no-large' }}
         shell: 'nix develop -c bash -euxo pipefail {0}'
       
       - name: Build checkers
