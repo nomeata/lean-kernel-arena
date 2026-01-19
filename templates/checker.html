@@ -111,10 +111,9 @@ section pre, details pre {
                 <th>Test</th>
                 <th class="text-center">Expected</th>
                 <th class="text-center">Result</th>
-                <th class="text-right">Wall Time</th>
-                <th class="text-right">CPU Time</th>
+                <th class="text-right">⏱️</th>
                 <th class="text-right"></th>
-                <th class="text-right">Max RSS</th>
+                <th class="text-right">🧠</th>
                 <th class="text-right"></th>
             </tr>
         </thead>
@@ -128,7 +127,6 @@ section pre, details pre {
                 <td class="text-center {% if (result.expected == 'accept' and result.status == 'accepted') or (result.expected == 'reject' and result.status == 'rejected') %}{% elif result.status == 'declined' %}bg-warning{% else %}bg-error{% endif %}">
                     {% if result.status == 'accepted' %}✅{% elif result.status == 'rejected' %}❌{% elif result.status == 'declined' %}🚫{% else %}💥{% endif %}
                 </td>
-                <td class="text-right">{{ format_duration(result.wall_time or 0) }}</td>
                 <td class="text-right">
                     {% if result.get('instructions', 0) > 0 and instructions_per_second > 0 %}
                         <span title="{{ format_instructions(result.get('instructions', 0)) }} instructions">{{ format_duration(convert_instructions_to_time(result.get('instructions', 0), instructions_per_second)) }}</span>
@@ -136,27 +134,23 @@ section pre, details pre {
                         {{ format_duration(result.cpu_time) }}
                     {% endif %}
                 </td>
-                <td class="text-right">
-                    {# CPU Time comparison - only show if test expected to succeed, both succeeded, official took >=1s #}
+                <td class="text-left">
+                    {# CPU Time comparison - only show if test expected to succeed, both succeeded, official took >=50ms #}
                     {% if result.expected == 'accept' and result.status == 'accepted' and result.official and result.official.status == 'accepted' %}
                         {% set official_cpu_time = convert_instructions_to_time(result.official.get('instructions', 0), instructions_per_second) if result.official.get('instructions', 0) > 0 and instructions_per_second > 0 else result.official.cpu_time %}
                         {% set current_cpu_time = convert_instructions_to_time(result.get('instructions', 0), instructions_per_second) if result.get('instructions', 0) > 0 and instructions_per_second > 0 else result.cpu_time %}
-                        {% if official_cpu_time and official_cpu_time >= 1.0 and current_cpu_time %}
+                        {% if official_cpu_time and official_cpu_time >= 0.05 and current_cpu_time %}
                             {% set percent_change = ((current_cpu_time - official_cpu_time) / official_cpu_time * 100) | round(0) | int %}
                             {% if percent_change > 0 %}(+{{ percent_change }}%){% elif percent_change < 0 %}({{ percent_change }}%){% else %}(0%){% endif %}
-                        {% else %}
-                            -
                         {% endif %}
                     {% endif %}
                 </td>
                 <td class="text-right">
                     {% if result.max_rss is not none %}
                         {{ format_memory(result.max_rss) }}
-                    {% else %}
-                        -
                     {% endif %}
                 </td>
-                <td class="text-right">
+                <td class="text-left">
                     {# Memory comparison - only show if test expected to succeed, both succeeded, official used >=200MB #}
                     {% if result.expected == 'accept' and result.status == 'accepted' and result.official and result.official.status == 'accepted' %}
                         {% set official_memory = result.official.max_rss %}
@@ -164,11 +158,7 @@ section pre, details pre {
                         {% if official_memory and official_memory >= 200*1024*1024 and current_memory %}
                             {% set percent_change = ((current_memory - official_memory) / official_memory * 100) | round(0) | int %}
                             {% if percent_change > 0 %}(+{{ percent_change }}%){% elif percent_change < 0 %}({{ percent_change }}%){% else %}(0%){% endif %}
-                        {% else %}
-                            -
                         {% endif %}
-                    {% else %}
-                        -
                     {% endif %}
                 </td>
             </tr>
@@ -219,15 +209,14 @@ section pre, details pre {
             {% if result.status == 'accepted' %}✅ accepted{% elif result.status == 'rejected' %}❌ rejected{% elif result.status == 'declined' %}🚫 declined{% else %}💥 {{ result.status }}{% endif %}
         </span>
         · exit code {{ result.exit_code }}
-        · wall: {{ format_duration(result.wall_time or 0) }}
-        {% if result.cpu_time is not none and result.cpu_time > 0 %}
-        · real cpu: {{ format_duration(result.cpu_time) }}
+        {% if result.wall is not none %}
+        · wall time: {{ format_duration(result.wall_time) }}
         {% endif %}
         {% if result.get('instructions', 0) > 0 %}
-        · inst: {{ format_instructions(result.get('instructions', 0)) }}
+        · instructions: {{ format_unitless(result.get('instructions', 0)) }}
         {% endif %}
         {% if result.max_rss is not none %}
-        · rss: {{ format_memory(result.max_rss) }}
+        · max rss memory: {{ format_memory(result.max_rss) }}
         {% endif %}
     </p>
     {% if result.stdout %}

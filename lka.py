@@ -1593,11 +1593,16 @@ def cmd_build_site(args: argparse.Namespace) -> int:
             total_cpu_time += cpu_time
             instruction_samples += 1
     
-    # Calculate average instructions per second
+    # Calculate observed instructions per second and report it
     if total_cpu_time > 0 and instruction_samples > 0:
-        instructions_per_second = total_instructions / total_cpu_time
+        observed_instructions_per_second = total_instructions / total_cpu_time
+        print(f"Observed conversion rate: {format_unitless(observed_instructions_per_second)}inst/s from {instruction_samples} samples")
     else:
-        instructions_per_second = 0
+        observed_instructions_per_second = 0
+        print("No instruction count measurements available for conversion rate calculation")
+    
+    # Use fixed hardcoded conversion rate of 6 Tinst/s
+    instructions_per_second = 6_000_000_000_000  # 6 trillion instructions per second
     
     # Compute stats for each checker
     for checker in checkers:

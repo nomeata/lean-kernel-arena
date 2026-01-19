@@ -39,9 +39,8 @@
                 <th class="text-center" title="Correctly accepted valid proofs">✅</th>
                 <th class="text-center" title="Correctly rejected invalid proofs">❌</th>
                 <th class="text-center" title="Tests declined to process">🚫</th>
-                <th class="text-right" title="Wall time to process mathlib test">⏱️ Wall</th>
-                <th class="text-right" title="CPU time to process mathlib test">⏱️ CPU</th>
-                <th class="text-right" title="Peak memory usage for mathlib test">🧠 RSS</th>
+                <th class="text-right" title="Virtual CPU time to process mathlib test">⏱️</th>
+                <th class="text-right" title="Peak memory usage for mathlib test">🧠</th>
             </tr>
         </thead>
         <tbody>
@@ -57,13 +56,6 @@
                 </td>
                 <td class="text-center">
                     {{ checker.stats.declined_count }}
-                </td>
-                <td class="text-right">
-                    {% if checker.stats.mathlib_time is not none %}
-                        {{ format_duration(checker.stats.mathlib_time) }}
-                    {% else %}
-                        -
-                    {% endif %}
                 </td>
                 <td class="text-right">
                     {% if checker.stats.get('mathlib_instructions', 0) > 0 and instructions_per_second > 0 %}
@@ -102,9 +94,8 @@
 
     <p>
         The time and space measurements refer to the <tt>mathlib</tt> test case, the largest correct test in the suite. 
-        {% if instructions_per_second > 0 %}
-            CPU time measurements are based on instruction counts when available, converted to equivalent time using an average rate of {{ format_unitless(instructions_per_second|round|int) }}instr/s across all measurements.
-        {% endif %}
+        The ⏱️ column shows virtual CPU time, calculated from instruction counts using a fixed rate of {{ format_unitless(instructions_per_second|round|int) }}instr/s. 
+        This provides consistent performance comparison across different hardware, though it does not reflect parallel processing capabilities that some checkers may use.
     </p>
 
     <p>
