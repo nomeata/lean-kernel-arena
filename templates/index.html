@@ -103,7 +103,7 @@
     <p>
         The time and space measurements refer to the <tt>mathlib</tt> test case, the largest correct test in the suite. 
         {% if instructions_per_second > 0 %}
-            CPU time measurements are based on instruction counts when available, converted to equivalent time using an average rate of {{ "%.1f"|format(instructions_per_second / 1000000000) }} billion instructions per second across all measurements.
+            CPU time measurements are based on instruction counts when available, converted to equivalent time using an average rate of {{ format_unitless(instructions_per_second|round|int) }}instr/s across all measurements.
         {% endif %}
     </p>
 
